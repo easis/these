@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
-import type { BrowseResponse } from "@these/shared";
+import type { BrowseResponse, TheseList } from "@these/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowsePage } from "./BrowsePage";
 
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   setItemStatus: vi.fn(),
   removeItem: vi.fn(),
   refresh: vi.fn(),
+  activeList: null as TheseList | null,
   preferences: {
     theme: "light",
     thumbnailSize: 180,
@@ -18,6 +19,13 @@ const mocks = vi.hoisted(() => ({
     showHidden: false,
     lastFolder: null as string | null,
   },
+}));
+
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 220,
+    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ key: index, index, start: index * 220, size: 220 })),
+  }),
 }));
 
 vi.mock("../lib/api", async () => ({
@@ -33,7 +41,7 @@ vi.mock("../state/app-context", () => ({
       activeListId: null,
       favorites: [],
     },
-    activeList: null,
+    activeList: mocks.activeList,
     loading: false,
     error: null,
     preferences: mocks.preferences,
@@ -48,7 +56,10 @@ describe("BrowsePage requests", () => {
   beforeEach(() => {
     mocks.api.mockReset();
     mocks.setPreferences.mockReset();
+    mocks.setItemStatus.mockReset();
+    mocks.removeItem.mockReset();
     mocks.refresh.mockReset();
+    mocks.activeList = null;
     Object.assign(mocks.preferences, {
       theme: "light",
       thumbnailSize: 180,
@@ -106,6 +117,121 @@ describe("BrowsePage requests", () => {
     await act(async () => pending.get("/media/old")!(browseResponse("/media/old", 11)));
     expect(screen.getByText("22 media · 0 folders")).toBeInTheDocument();
     expect(screen.queryByText("11 media · 0 folders")).not.toBeInTheDocument();
+  });
+
+  it("clears the previous gallery only when navigating to another folder", async () => {
+    const nextFolder = deferred<BrowseResponse>();
+    mocks.api.mockImplementation((url: string) => {
+      const folderPath = new URL(url, "http://these.test").searchParams.get("path");
+      return folderPath === "/media/new" ? nextFolder.promise : Promise.resolve(browseResponse("/media/old", 1, { media: [mediaEntry("/media/old/old.jpg")] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia%2Fold"]}><NavigationHarness /></MemoryRouter>);
+    expect(await screen.findByText("old.jpg")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open new folder" }));
+
+    expect(await screen.findByText("Opening folder…")).toBeInTheDocument();
+    expect(screen.queryByText("old.jpg")).not.toBeInTheDocument();
+
+    nextFolder.resolve(browseResponse("/media/new", 1, { media: [mediaEntry("/media/new/new.jpg")] }));
+    expect(await screen.findByText("new.jpg")).toBeInTheDocument();
+  });
+
+  it("keeps the current gallery mounted while a same-folder filter revalidates", async () => {
+    const filtered = deferred<BrowseResponse>();
+    let requests = 0;
+    mocks.api.mockImplementation(() => {
+      requests += 1;
+      return requests === 1
+        ? Promise.resolve(browseResponse("/media", 1, { media: [mediaEntry("/media/old.jpg")] }))
+        : filtered.promise;
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("old.jpg")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "new" } });
+    await waitFor(() => expect(requests).toBe(2));
+
+    expect(screen.getByText("old.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
+    expect(document.querySelector(".gallery-scroll")).toHaveAttribute("aria-busy", "true");
+
+    filtered.resolve(browseResponse("/media", 1, { media: [mediaEntry("/media/new.jpg")] }));
+    expect(await screen.findByText("new.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("old.jpg")).not.toBeInTheDocument();
+  });
+
+  it("clears a transient same-folder request error after the next successful response", async () => {
+    const failedRequest = deferred<BrowseResponse>();
+    let requests = 0;
+    mocks.api.mockImplementation(() => {
+      requests += 1;
+      if (requests === 1) return Promise.resolve(browseResponse("/media", 1, { media: [mediaEntry("/media/old.jpg")] }));
+      if (requests === 2) return failedRequest.promise;
+      return Promise.resolve(browseResponse("/media", 1, { media: [mediaEntry("/media/recovered.jpg")] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("old.jpg")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "broken" } });
+    await waitFor(() => expect(requests).toBe(2));
+
+    await act(async () => failedRequest.reject(new Error("Temporary browse failure.")));
+    expect(await screen.findByText("Temporary browse failure.")).toBeInTheDocument();
+    expect(screen.getByText("old.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "recovered" } });
+    expect(await screen.findByText("recovered.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("Temporary browse failure.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
+  });
+
+  it("does not show the opening placeholder when revalidating a folder-only response", async () => {
+    const revalidated = deferred<BrowseResponse>();
+    let requests = 0;
+    const folders = [{ path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false }];
+    mocks.api.mockImplementation(() => {
+      requests += 1;
+      return requests === 1 ? Promise.resolve(browseResponse("/media", 0, { folders })) : revalidated.promise;
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByRole("button", { name: /Photos/ })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "photo" } });
+    await waitFor(() => expect(requests).toBe(2));
+
+    expect(screen.getByRole("button", { name: /Photos/ })).toBeInTheDocument();
+    expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
+    revalidated.resolve(browseResponse("/media", 0, { folders }));
+  });
+
+  it("keeps media visible and clears stale classifications while the active list changes", async () => {
+    const revalidated = deferred<BrowseResponse>();
+    const firstList = list(7, "Keepers");
+    const secondList = list(8, "Review");
+    mocks.activeList = firstList;
+    let requests = 0;
+    mocks.api.mockImplementation(() => {
+      requests += 1;
+      return requests === 1
+        ? Promise.resolve(browseResponse("/media", 1, { media: [{ ...mediaEntry("/media/photo.jpg"), status: "selected" }] }))
+        : revalidated.promise;
+    });
+
+    const { rerender } = render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("photo.jpg")).toBeInTheDocument();
+    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-selected");
+
+    mocks.activeList = secondList;
+    rerender(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    await waitFor(() => expect(requests).toBe(2));
+    expect(screen.getByText("photo.jpg")).toBeInTheDocument();
+    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-none");
+    expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
+
+    revalidated.resolve(browseResponse("/media", 1, { media: [{ ...mediaEntry("/media/photo.jpg"), status: "maybe" }] }));
+    await waitFor(() => expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-maybe"));
   });
 
   it("sends the filename filter to the backend and keeps server pagination", async () => {
@@ -200,6 +326,70 @@ describe("BrowsePage requests", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?path=%2Fmedia"));
   });
 
+  it("updates a favorite optimistically and restores it without flashing when the request fails", async () => {
+    const update = deferred<unknown>();
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/folder-metadata" && init?.method === "POST") return update.promise;
+      return Promise.resolve(browseResponse("/media/photos", 1, { media: [mediaEntry("/media/photos/photo.jpg")] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia%2Fphotos"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("photo.jpg")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add current folder to favorites" }));
+
+    const optimisticButton = screen.getByRole("button", { name: "Remove current folder from favorites" });
+    expect(optimisticButton).toBeDisabled();
+    expect(screen.getByText("photo.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
+
+    update.reject(new Error("Could not save the favorite."));
+    expect(await screen.findByText("Could not save the favorite.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add current folder to favorites" })).not.toBeDisabled();
+    expect(screen.getByText("photo.jpg")).toBeInTheDocument();
+  });
+
+  it("does not restore a failed folder mutation after navigating elsewhere", async () => {
+    const update = deferred<unknown>();
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/folder-metadata" && init?.method === "POST") return update.promise;
+      const folderPath = new URL(url, "http://these.test").searchParams.get("path")!;
+      return Promise.resolve(browseResponse(folderPath, 1, { media: [mediaEntry(`${folderPath}/${folderPath.endsWith("new") ? "new" : "old"}.jpg`)] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia%2Fold"]}><NavigationHarness /></MemoryRouter>);
+    expect(await screen.findByText("old.jpg")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add current folder to favorites" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open new folder" }));
+    expect(await screen.findByText("new.jpg")).toBeInTheDocument();
+
+    await act(async () => update.reject(new Error("Could not save the favorite.")));
+    expect(await screen.findByText("Could not save the favorite.")).toBeInTheDocument();
+    expect(screen.getByText("new.jpg")).toBeInTheDocument();
+    expect(screen.queryByTitle("/media/old")).not.toBeInTheDocument();
+  });
+
+  it("rolls back a failed optimistic classification without replacing the gallery", async () => {
+    const update = deferred<void>();
+    mocks.activeList = list(7, "Keepers");
+    mocks.setItemStatus.mockReturnValue(update.promise);
+    mocks.api.mockResolvedValue(browseResponse("/media", 1, { media: [mediaEntry("/media/photo.jpg")] }));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("photo.jpg")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mark selected" }));
+
+    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-selected");
+    expect(screen.getByRole("button", { name: "Mark selected" })).toBeDisabled();
+    expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
+
+    update.reject(new Error("Could not classify the file."));
+    expect(await screen.findByText("Could not classify the file.")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.api).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Could not classify the file.")).toBeInTheDocument();
+    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-none");
+    expect(screen.getByRole("button", { name: "Mark selected" })).not.toBeDisabled();
+  });
+
   it("does not hide a media root and can restore a hidden subfolder", async () => {
     mocks.api.mockResolvedValue(browseResponse("/media", 0, {
       folders: [{ path: "/media/hidden", name: "hidden", displayName: "Hidden", hidden: true, favorite: false }],
@@ -245,4 +435,29 @@ function browseResponse(folderPath: string, totalMedia: number, overrides: Parti
     hasMore: false,
     ...overrides,
   };
+}
+
+function mediaEntry(path: string): BrowseResponse["media"][number] {
+  return {
+    path,
+    name: path.split("/").pop()!,
+    kind: "image",
+    size: 1,
+    modifiedAt: "2026-01-01T00:00:00.000Z",
+    status: null,
+  };
+}
+
+function list(id: number, name: string): TheseList {
+  return { id, name, selectedCount: 0, maybeCount: 0, createdAt: "", updatedAt: "" };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }

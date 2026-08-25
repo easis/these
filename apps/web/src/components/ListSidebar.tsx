@@ -9,8 +9,25 @@ export function ListSidebar({ onClose }: { onClose?: () => void }) {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const [activating, setActivating] = useState(false);
+  const activatingRef = useRef(false);
+  const [activationError, setActivationError] = useState<string | null>(null);
+  const activate = async (id: number | null) => {
+    if (activatingRef.current) return;
+    activatingRef.current = true;
+    setActivating(true);
+    setActivationError(null);
+    try {
+      await setActiveList(id);
+    } catch (caught) {
+      setActivationError(caught instanceof Error ? caught.message : "Could not change the active list.");
+    } finally {
+      activatingRef.current = false;
+      setActivating(false);
+    }
+  };
   return (
-    <aside className="side-panel right-panel" aria-label="Lists">
+    <aside className="side-panel right-panel" aria-label="Lists" aria-busy={activating}>
       <div className="panel-heading">
         <span>Lists</span>
         <span className="panel-heading-actions">
@@ -41,12 +58,13 @@ export function ListSidebar({ onClose }: { onClose?: () => void }) {
           </span>
         </form>
       ) : <button className="list-create-trigger" type="button" onClick={() => setCreating(true)}><Plus size={14} />New list</button>}
+      {activationError ? <div className="inline-error mx-1.5 mb-2" role="alert">{activationError}</div> : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
         {bootstrap?.lists.length ? bootstrap.lists.map((list) => {
           const isActive = activeList?.id === list.id;
           return (
             <div className={`list-row ${isActive ? "is-active" : ""}`} key={list.id}>
-              <button className="list-select" type="button" onClick={() => void setActiveList(isActive ? null : list.id)} aria-label={isActive ? `Deactivate ${list.name}` : `Make ${list.name} active`} aria-pressed={isActive}>
+              <button className="list-select" type="button" disabled={activating} onClick={() => void activate(isActive ? null : list.id)} aria-label={isActive ? `Deactivate ${list.name}` : `Make ${list.name} active`} aria-pressed={isActive}>
                 <span className="active-ring" aria-hidden="true" />
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-sm font-medium">{list.name}</span>
