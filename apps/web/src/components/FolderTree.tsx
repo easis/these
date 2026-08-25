@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, FolderHeart, HardDrive } from "lucide-react";
+import { ChevronRight, Folder, FolderHeart, HardDrive, PanelLeftClose } from "lucide-react";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { BrowseResponse, FolderEntry } from "@these/shared";
@@ -41,7 +41,7 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
 
   return (
     <div role="treeitem" aria-expanded={expanded}>
-      <div className={`tree-row ${currentPath === folder.path ? "is-current" : ""}`} style={{ paddingLeft: `${6 + depth * 14}px` }}>
+      <div className={`tree-row ${currentPath === folder.path ? "is-current" : ""} ${folder.hidden ? "is-hidden" : ""}`} style={{ paddingLeft: `${6 + depth * 14}px` }}>
         <button type="button" className="tree-toggle" onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} ${folder.displayName}`}>
           <ChevronRight className={expanded ? "rotate-90" : ""} size={13} />
         </button>
@@ -60,18 +60,19 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
   );
 });
 
-export function FolderTree({ currentPath }: { currentPath: string | null }) {
+export function FolderTree({ currentPath, onClose }: { currentPath: string | null; onClose?: () => void }) {
   const { bootstrap, preferences } = useApp();
   const navigate = useNavigate();
   const open = useCallback((folderPath: string) => navigate(`/browse?${query({ path: folderPath })}`), [navigate]);
+  const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !favorite.hidden)) ?? [];
   return (
     <aside className="side-panel left-panel" aria-label="Folders">
-      <div className="panel-heading">Folders</div>
-      {bootstrap?.favorites.length ? (
+      <div className="panel-heading"><span>Folders</span>{onClose ? <button className="icon-button panel-close" type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
+      {visibleFavorites.length ? (
         <section className="border-b border-default pb-2">
           <h2 className="panel-section-label"><FolderHeart size={12} /> Favorites</h2>
-          {bootstrap.favorites.filter((favorite) => favorite.status === "ok").map((favorite) => (
-            <button className="favorite-row" type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
+          {visibleFavorites.map((favorite) => (
+            <button className={`favorite-row ${favorite.hidden ? "is-hidden" : ""}`} type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
               <span className="truncate">{favorite.alias ?? favorite.path.split("/").pop()}</span>
             </button>
           ))}

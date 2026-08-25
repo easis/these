@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rename, rm, unlink, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import type { BrowseResponse, FolderMetadata, ListItem, TheseList } from "@these/shared";
+import type { BootstrapResponse, BrowseResponse, FolderMetadata, ListItem, TheseList } from "@these/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig, parseMediaRoots } from "../src/config.js";
 
@@ -45,6 +45,8 @@ describe("These API", () => {
 
     const partialUpdate = await app!.inject({ method: "POST", url: "/api/folder-metadata", payload: { path: firstPath, hidden: true } });
     expect(partialUpdate.json<FolderMetadata>()).toMatchObject({ id: record.id, alias: "Dogs", favorite: true, hidden: true });
+    const browsed = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(firstPath)}&showHidden=true` });
+    expect(browsed.json<BrowseResponse>().currentFolder).toMatchObject({ path: firstPath, name: "result-123", displayName: "Dogs", favorite: true, hidden: true });
 
     await mkdir(path.dirname(repairedPath), { recursive: true });
     await rename(firstPath, repairedPath);
@@ -62,6 +64,13 @@ describe("These API", () => {
     await mkdir(child, { recursive: true });
     const created = await app!.inject({ method: "POST", url: "/api/folder-metadata", payload: { path: hidden, hidden: true } });
     const record = created.json<FolderMetadata>();
+    await app!.inject({ method: "POST", url: "/api/folder-metadata", payload: { path: child, favorite: true } });
+
+    const bootstrap = (await app!.inject({ method: "GET", url: "/api/bootstrap" })).json<BootstrapResponse>();
+    expect(bootstrap.favorites).toContainEqual(expect.objectContaining({ path: child, favorite: true, hidden: true }));
+    const directMetadata = (await app!.inject({ method: "GET", url: "/api/folder-metadata" })).json<FolderMetadata[]>();
+    expect(directMetadata.find((folder) => folder.path === child)).toMatchObject({ hidden: false });
+
     const hiddenBrowse = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(child)}` });
     expect(hiddenBrowse.statusCode).toBe(404);
     expect(hiddenBrowse.json()).toMatchObject({ code: "FOLDER_HIDDEN" });
@@ -112,6 +121,29 @@ describe("These API", () => {
       hasMore: false,
       media: [{ name: "cat-beta.png" }],
     });
+  });
+
+  it("filters media kinds before filename matching and pagination", async () => {
+    await Promise.all([
+      writeFile(path.join(root, "cat-photo.jpg"), "one"),
+      writeFile(path.join(root, "cat-video.mp4"), "two"),
+      writeFile(path.join(root, "dog-video.webm"), "three"),
+    ]);
+
+    const videos = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}&kinds=video&filter=CAT&limit=1` });
+    expect(videos.statusCode).toBe(200);
+    expect(videos.json<BrowseResponse>()).toMatchObject({
+      totalMedia: 1,
+      hasMore: false,
+      media: [{ name: "cat-video.mp4", kind: "video" }],
+    });
+
+    const defaultKinds = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}&filter=CAT` });
+    expect(defaultKinds.json<BrowseResponse>()).toMatchObject({ totalMedia: 2 });
+
+    const invalid = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}&kinds=other` });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({ code: "INVALID_MEDIA_KINDS" });
   });
 
   it("keeps missing list items and removes them explicitly", async () => {

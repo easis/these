@@ -36,11 +36,13 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
       roots,
       lists,
       activeListId,
-      favorites: metadata.filter((folder) => folder.favorite),
+      favorites: metadata
+        .filter((folder) => folder.favorite)
+        .map((folder) => ({ ...folder, hidden: isHiddenByMetadata(folder.path, metadata) })),
     };
   });
 
-  app.get<{ Querystring: { path?: string; offset?: string; limit?: string; activeListId?: string; showHidden?: string; filter?: string } }>("/api/browse", async (request) => {
+  app.get<{ Querystring: { path?: string; offset?: string; limit?: string; activeListId?: string; showHidden?: string; filter?: string; kinds?: string } }>("/api/browse", async (request) => {
     const requestedPath = request.query.path ?? mediaRoots.getConfiguredRoots().find((root) => root.available)?.path;
     if (!requestedPath) throw new AppError("No available media roots are configured.", 503, "NO_MEDIA_ROOTS");
     const showHidden = request.query.showHidden === "true";
@@ -51,6 +53,16 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
     const resolved = await mediaAccess.resolveExisting(requestedPath, "directory");
     const entries = await readdir(resolved.canonicalPath!, { withFileTypes: true });
     const metadataByPath = new Map(metadata.map((record) => [record.path, record]));
+    const publicRoot = mediaRoots.getPublicRoots().find((root) => root.id === resolved.root.id)!;
+    const currentMetadata = metadataByPath.get(resolved.requestedPath);
+    const currentName = resolved.requestedPath === publicRoot.path ? publicRoot.label : path.basename(resolved.requestedPath);
+    const currentFolder = {
+      path: resolved.requestedPath,
+      name: currentName,
+      displayName: currentMetadata?.alias ?? (resolved.requestedPath === publicRoot.path ? publicRoot.label : currentName),
+      hidden: currentMetadata?.hidden ?? false,
+      favorite: currentMetadata?.favorite ?? false,
+    };
     const folders = entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => {
@@ -68,8 +80,13 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
       .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true }));
 
     const filenameFilter = request.query.filter?.trim().toLowerCase() ?? "";
+    const requestedKinds = parseMediaKinds(request.query.kinds);
     const mediaNames = entries
-      .filter((entry) => entry.isFile() && mediaKindForPath(entry.name) !== null)
+      .filter((entry) => {
+        if (!entry.isFile()) return false;
+        const kind = mediaKindForPath(entry.name);
+        return kind !== null && requestedKinds.has(kind);
+      })
       .map((entry) => entry.name)
       .filter((name) => !filenameFilter || name.toLowerCase().includes(filenameFilter))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -90,7 +107,8 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
     }));
     const response: BrowseResponse = {
       path: resolved.requestedPath,
-      root: mediaRoots.getPublicRoots().find((root) => root.id === resolved.root.id)!,
+      root: publicRoot,
+      currentFolder,
       folders,
       media,
       totalMedia: mediaNames.length,
@@ -291,6 +309,15 @@ function nullableInteger(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseMediaKinds(value: string | undefined): Set<MediaKind> {
+  if (value === undefined) return new Set(["image", "video"]);
+  const values = value.split(",").map((kind) => kind.trim()).filter(Boolean);
+  if (!values.length || values.some((kind) => kind !== "image" && kind !== "video")) {
+    throw new AppError("Kinds must contain image, video, or both.", 400, "INVALID_MEDIA_KINDS");
+  }
+  return new Set(values as MediaKind[]);
 }
 
 function clampInteger(value: string | undefined, minimum: number, maximum: number, fallback: number) {
