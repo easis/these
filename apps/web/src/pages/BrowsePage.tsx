@@ -25,6 +25,7 @@ export function BrowsePage() {
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pendingFolderPaths, setPendingFolderPaths] = useState<Set<string>>(() => new Set());
   const [pendingMediaPaths, setPendingMediaPaths] = useState<Set<string>>(() => new Set());
+  const [folderHiddenOverrides, setFolderHiddenOverrides] = useState<Map<string, boolean>>(() => new Map());
   const requestSequence = useRef(0);
   const loadMoreController = useRef<AbortController | null>(null);
   const displayedPath = useRef<string | null>(null);
@@ -145,6 +146,14 @@ export function BrowsePage() {
   }, [removeItem, setItemStatus]);
 
   const openFolder = (folderPath: string) => navigate(`/browse?${query({ path: folderPath })}`);
+  const updateFolderHiddenOverride = (folderPath: string, hidden: boolean) => {
+    setFolderHiddenOverrides((current) => {
+      if (current.get(folderPath) === hidden) return current;
+      const next = new Map(current);
+      next.set(folderPath, hidden);
+      return next;
+    });
+  };
   const updateFolder = async (folder: FolderEntry, patch: FolderPatch) => {
     if (pendingFolderPathsRef.current.has(folder.path)) return false;
     const mutationBrowsePath = responseRef.current?.path;
@@ -152,11 +161,13 @@ export function BrowsePage() {
     pendingFolderPathsRef.current.add(folder.path);
     setPendingFolderPaths(new Set(pendingFolderPathsRef.current));
     optimisticFolderPatches.current.set(folder.path, patch);
+    if (patch.hidden !== undefined) updateFolderHiddenOverride(folder.path, patch.hidden);
     setResponse((current) => current ? applyFolderPatchToBrowse(current, folder.path, patch, preferences.showHidden) : current);
     try {
       const saved = await api<FolderMetadata>("/api/folder-metadata", { method: "POST", body: JSON.stringify({ path: folder.path, ...patch }) });
       const savedPatch: FolderPatch = { alias: saved.alias, favorite: saved.favorite, hidden: saved.hidden };
       optimisticFolderPatches.current.set(folder.path, savedPatch);
+      if (patch.hidden !== undefined) updateFolderHiddenOverride(folder.path, saved.hidden ?? patch.hidden);
       setResponse((current) => current ? applyFolderPatchToBrowse(current, folder.path, savedPatch, preferences.showHidden) : current);
       setReloadVersion((value) => value + 1);
       void refresh();
@@ -164,6 +175,7 @@ export function BrowsePage() {
       return true;
     } catch (caught) {
       optimisticFolderPatches.current.delete(folder.path);
+      if (patch.hidden !== undefined) updateFolderHiddenOverride(folder.path, previousFolder.hidden);
       setResponse((current) => current && current.path === mutationBrowsePath ? restoreBrowseFolder(current, previousFolder) : current);
       setMutationError(caught instanceof Error ? caught.message : "Could not update the folder.");
       return false;
@@ -185,7 +197,7 @@ export function BrowsePage() {
 
   return (
     <div className="browser-layout">
-      {preferences.leftSidebarOpen ? <FolderTree currentPath={response?.path ?? requestedPath} onClose={() => setPreferences({ leftSidebarOpen: false })} /> : null}
+      {preferences.leftSidebarOpen ? <FolderTree currentPath={response?.path ?? requestedPath} hiddenOverrides={folderHiddenOverrides} onClose={() => setPreferences({ leftSidebarOpen: false })} /> : null}
       <section className="gallery-panel">
         <div className="gallery-toolbar">
           {!preferences.leftSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ leftSidebarOpen: true, ...(matchMedia("(max-width: 720px)").matches ? { rightSidebarOpen: false } : {}) })} aria-label="Show folder sidebar"><PanelLeftClose className="rotate-180" size={15} /></button> : null}

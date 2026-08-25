@@ -62,6 +62,35 @@ describe("FolderTree", () => {
     expect((await screen.findByText("Hidden child")).closest(".tree-row")).toHaveClass("is-hidden");
     expect(screen.getByRole("button", { name: "Hidden favorite" })).toHaveClass("is-hidden");
   });
+
+  it("applies hidden overrides immediately to cached tree nodes", async () => {
+    mocks.api.mockResolvedValue(treeResponse("Photos", "/media/photos"));
+    const { rerender } = render(<FolderTree currentPath="/media/current" />, { wrapper: MemoryRouter });
+    expect(await screen.findByTitle("/media/photos")).toBeInTheDocument();
+
+    rerender(<FolderTree currentPath="/media/current" hiddenOverrides={new Map([["/media/photos", true]])} />);
+    expect(screen.queryByTitle("/media/photos")).not.toBeInTheDocument();
+
+    mocks.showHidden = true;
+    rerender(<FolderTree currentPath="/media/current" hiddenOverrides={new Map([["/media/photos", true]])} />);
+    expect(screen.getByTitle("/media/photos").closest(".tree-row")).toHaveClass("is-hidden");
+
+    rerender(<FolderTree currentPath="/media/current" hiddenOverrides={new Map([["/media/photos", false]])} />);
+    expect(screen.getByTitle("/media/photos").closest(".tree-row")).not.toHaveClass("is-hidden");
+  });
+
+  it("applies an ancestral hidden override to descendant favorites", () => {
+    mocks.favorites = [{ id: 1, path: "/media/photos/trip", alias: "Trip", favorite: true, hidden: false, status: "ok", createdAt: "", updatedAt: "" }];
+    mocks.api.mockResolvedValue(treeResponse("Photos", "/media/photos"));
+    const overrides = new Map<string, boolean>([["/media/photos", true], ["/media/photos/trip", false]]);
+    const { rerender } = render(<FolderTree currentPath="/media" hiddenOverrides={overrides} />, { wrapper: MemoryRouter });
+
+    expect(screen.queryByRole("button", { name: "Trip" })).not.toBeInTheDocument();
+
+    mocks.showHidden = true;
+    rerender(<FolderTree currentPath="/media" hiddenOverrides={overrides} />);
+    expect(screen.getByRole("button", { name: "Trip" })).toHaveClass("is-hidden");
+  });
 });
 
 function treeResponse(name: string, folderPath: string, hidden = false): BrowseResponse {
