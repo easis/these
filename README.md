@@ -79,24 +79,30 @@ Copy the example and replace its host paths with your own:
 
 ```sh
 cp docker-compose.example.yml docker-compose.yml
-docker compose up --build
+docker compose up -d
 ```
 
 Open [http://localhost:4000](http://localhost:4000), go to **Settings → Media roots**, and add the container path of each mounted library — for example `/media/photos`.
 
-The included Compose file builds the image locally. A minimal mount setup looks like this:
+The included Compose file pulls the public image from GitHub Container Registry. A minimal mount setup looks like this:
 
 ```yaml
 services:
   these:
-    build: .
-    image: these:local
+    image: ghcr.io/easis/these:latest
     ports:
       - "4000:4000"
     volumes:
       - ./data:/data
       - /volume1/photos:/media/photos:ro
       - /volume1/videos:/media/videos:ro
+```
+
+To update to the latest image:
+
+```sh
+docker compose pull
+docker compose up -d
 ```
 
 Here `/volume1/photos` is the real host directory and `/media/photos` is its stable path inside the container. Add `/media/photos` in *these* after the service starts. The display label can be anything you like.

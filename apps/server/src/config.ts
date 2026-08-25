@@ -22,8 +22,14 @@ export interface AppConfig {
 export async function loadConfig(overrides: Partial<AppConfig> = {}): Promise<AppConfig> {
   const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
   const projectRoot = path.resolve(moduleDirectory, "../../..");
-  const environment = dotenvFlow.config({ path: projectRoot, default_node_env: "development", silent: true });
-  if (environment.error) throw environment.error;
+  const environmentFiles = dotenvFlow.listFiles({
+    path: projectRoot,
+    node_env: process.env.NODE_ENV ?? "development",
+  });
+  if (environmentFiles.length > 0) {
+    const environment = dotenvFlow.load(environmentFiles, { silent: true });
+    if (environment.error) throw environment.error;
+  }
   const configuredDataDir = overrides.dataDir ?? process.env.DATA_DIR ?? "/data";
   return {
     dataDir: path.isAbsolute(configuredDataDir) ? configuredDataDir : path.resolve(projectRoot, configuredDataDir),
