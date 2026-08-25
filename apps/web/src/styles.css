@@ -191,19 +191,29 @@ code { font-size: .9em; }
 .size-control { height: 28px; display: flex; align-items: center; gap: 5px; padding: 0 5px; color: var(--text-muted); }
 .size-control input { width: 70px; accent-color: var(--accent); }
 .gallery-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 7px; }
-.folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 5px; margin-bottom: 8px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
-.folder-item { min-width: 0; height: 31px; display: flex; align-items: center; border: 1px solid transparent; border-radius: 4px; color: var(--text-secondary); background: var(--surface); }
-.folder-item:hover { border-color: var(--border); color: var(--text-primary); }
-.folder-open { min-width: 0; height: 29px; flex: 1; display: flex; align-items: center; gap: 6px; padding: 0 8px; border: 0; color: inherit; background: transparent; text-align: left; font-size: 12px; cursor: pointer; }
-.folder-actions { display: none; flex: none; align-items: center; padding-right: 2px; }
-.folder-item:hover .folder-actions, .folder-item:focus-within .folder-actions { display: flex; }
-.folder-actions button { width: 22px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 3px; color: var(--text-muted); background: transparent; cursor: pointer; }
-.folder-actions button:hover { color: var(--text-primary); background: var(--surface-hover); }
+.folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 7px; margin-bottom: 8px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
+.folder-item { --folder-item-background: var(--surface); position: relative; min-width: 0; height: 42px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--folder-item-background); transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease; }
+.folder-item:hover, .folder-item:focus-within { --folder-item-background: var(--surface-hover); border-color: var(--border-strong); color: var(--text-primary); }
+.folder-item:focus-within { border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong)); }
+.folder-open { min-width: 0; height: 40px; flex: 1; display: flex; align-items: center; gap: 8px; overflow: hidden; padding: 0 10px; border: 0; color: inherit; background: transparent; text-align: left; font-size: 13px; cursor: pointer; transition: padding-right 100ms ease; }
+.folder-open > svg { flex: none; }
+.folder-item.is-editing .folder-open { flex: 0 0 42px; padding-right: 0; }
+.folder-item.is-editing .folder-open .truncate, .folder-item.is-editing .folder-statuses { display: none; }
+.folder-statuses { min-width: 0; flex: none; display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding-left: 3px; transition: opacity 100ms ease; }
+.folder-statuses .is-favorite { color: var(--maybe); }
+.folder-statuses .is-hidden { color: var(--accent); }
+.folder-actions { position: absolute; z-index: 1; right: 3px; top: 50%; display: flex; align-items: center; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-50%); transition: opacity 100ms ease, visibility 100ms ease; }
+.folder-actions::before { position: absolute; inset: 0 auto 0 -14px; width: 14px; content: ""; pointer-events: none; background: linear-gradient(90deg, transparent, var(--folder-item-background)); }
+.folder-item:not(.is-editing):hover .folder-open, .folder-item:not(.is-editing):focus-within .folder-open { padding-right: 114px; }
+.folder-item:hover .folder-actions, .folder-item:focus-within .folder-actions { opacity: 1; visibility: visible; }
+.folder-item:hover .folder-statuses, .folder-item:focus-within .folder-statuses { opacity: 0; }
+.folder-actions button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 4px; color: var(--text-muted); background: transparent; pointer-events: auto; cursor: pointer; }
+.folder-actions button:hover { color: var(--text-primary); background: var(--surface); }
 .folder-actions .is-favorite { color: var(--maybe); }
 .folder-actions .is-hidden { color: var(--accent); background: var(--accent-soft); }
-.folder-alias-form { flex: 1; display: flex; align-items: center; gap: 3px; padding-right: 3px; }
-.folder-alias-form input { min-width: 0; height: 24px; flex: 1; padding: 0 5px; border: 1px solid var(--accent); border-radius: 3px; background: var(--surface); font-size: 11px; }
-.folder-alias-form button { height: 24px; padding: 0 5px; border: 0; border-radius: 3px; color: white; background: var(--accent); font-size: 10px; }
+.folder-alias-form { min-width: 118px; flex: 1; display: flex; align-items: center; gap: 4px; padding-right: 4px; }
+.folder-alias-form input { min-width: 0; height: 32px; flex: 1; padding: 0 7px; border: 1px solid var(--accent); border-radius: 4px; background: var(--surface); font-size: 12px; }
+.folder-alias-form button { height: 32px; padding: 0 7px; border: 0; border-radius: 4px; color: white; background: var(--accent); font-size: 11px; }
 .virtual-gallery-scroll { height: max(360px, calc(100dvh - 180px)); overflow-y: auto; scrollbar-gutter: stable; }
 .media-tile { position: relative; min-height: 0; border-radius: 3px; overflow: hidden; background: var(--surface-secondary); }
 .media-tile::before { content: ""; position: absolute; z-index: 3; inset: 0 auto 0 0; width: 3px; pointer-events: none; }
@@ -451,7 +461,10 @@ code { font-size: .9em; }
   .folder-grid { grid-template-columns: 1fr; gap: 6px; }
   .folder-item { min-height: 48px; height: auto; }
   .folder-open { min-height: 48px; height: auto; padding-inline: 11px; font-size: 13px; }
-  .folder-actions { display: flex; padding-right: 2px; }
+  .folder-item:not(.is-editing):hover .folder-open, .folder-item:not(.is-editing):focus-within .folder-open { padding-right: 11px; }
+  .folder-actions { position: static; display: flex; padding: 0 2px 0 0; opacity: 1; visibility: visible; pointer-events: auto; background: transparent; transform: none; }
+  .folder-actions::before { content: none; }
+  .folder-statuses { display: none; }
   .folder-actions button { width: 44px; height: 44px; }
   .folder-alias-form { min-height: 48px; padding: 2px 3px 2px 0; }
   .folder-alias-form input, .folder-alias-form button { height: 42px; }

@@ -626,6 +626,49 @@ describe("BrowsePage requests", () => {
     expect(screen.queryByText("No media in this folder.")).not.toBeInTheDocument();
   });
 
+  it("shows persistent folder states without changing directory navigation names", async () => {
+    mocks.api.mockResolvedValue(browseResponse("/media", 0, {
+      folders: [
+        { path: "/media/normal", name: "normal", displayName: "Normal", hidden: false, favorite: false },
+        { path: "/media/favorite", name: "favorite", displayName: "Favorite folder", hidden: false, favorite: true },
+        { path: "/media/hidden", name: "hidden", displayName: "Hidden folder", hidden: true, favorite: false },
+      ],
+    }));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+
+    const normal = await screen.findByRole("button", { name: /^Normal$/ });
+    const favorite = screen.getByRole("button", { name: /^Favorite folder$/ });
+    const hidden = screen.getByRole("button", { name: /^Hidden folder$/ });
+    expect(normal.querySelector(".folder-statuses")).not.toBeInTheDocument();
+    expect(favorite.querySelector(".folder-statuses .is-favorite")).toBeInTheDocument();
+    expect(hidden.querySelector(".folder-statuses .is-hidden")).toBeInTheDocument();
+    expect(within(favorite.closest<HTMLElement>(".folder-item")!).getByRole("button", { name: "Remove favorite" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(hidden.closest<HTMLElement>(".folder-item")!).getByRole("button", { name: "Unhide folder" })).toBeInTheDocument();
+  });
+
+  it("updates and restores a subfolder favorite indicator optimistically", async () => {
+    const update = deferred<unknown>();
+    const photos = { path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false };
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/folder-metadata" && init?.method === "POST") return update.promise;
+      return Promise.resolve(browseResponse("/media", 0, { folders: [photos] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    const folder = (await screen.findByRole("button", { name: /^Photos$/ })).closest<HTMLElement>(".folder-item")!;
+    expect(folder.querySelector(".folder-statuses")).not.toBeInTheDocument();
+
+    fireEvent.click(within(folder).getByRole("button", { name: "Favorite" }));
+    expect(folder.querySelector(".folder-statuses .is-favorite")).toBeInTheDocument();
+    expect(within(folder).getByRole("button", { name: "Remove favorite" })).toBeDisabled();
+
+    await act(async () => update.reject(new Error("Could not save the favorite.")));
+    expect(await screen.findByText("Could not save the favorite.")).toBeInTheDocument();
+    expect(folder.querySelector(".folder-statuses")).not.toBeInTheDocument();
+    expect(within(folder).getByRole("button", { name: "Favorite" })).not.toBeDisabled();
+  });
+
   it("filters images and videos independently while keeping one type active", async () => {
     mocks.api.mockResolvedValue(browseResponse("/media", 0));
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);

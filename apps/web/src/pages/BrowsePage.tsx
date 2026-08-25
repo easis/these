@@ -486,13 +486,20 @@ function FolderGrid({ folders, pendingPaths, onOpen, onUpdate }: { folders: Fold
       {folders.map((folder) => {
         const pending = pendingPaths.has(folder.path);
         return (
-          <div className={`folder-item ${folder.hidden ? "is-hidden" : ""}`} key={folder.path} aria-busy={pending}>
-            <button type="button" className="folder-open" onClick={() => onOpen(folder.path)} title={folder.path}><Folder size={15} fill="currentColor" fillOpacity={0.08} /><span className="truncate">{folder.displayName}</span></button>
+          <div className={`folder-item ${folder.hidden ? "is-hidden" : ""} ${editing === folder.path ? "is-editing" : ""}`} key={folder.path} aria-busy={pending}>
+            <button type="button" className="folder-open" onClick={() => onOpen(folder.path)} title={folder.path} aria-label={folder.displayName}>
+              <Folder size={17} fill="currentColor" fillOpacity={0.08} />
+              <span className="truncate">{folder.displayName}</span>
+              {folder.favorite || folder.hidden ? <span className="folder-statuses" aria-hidden="true">
+                {folder.favorite ? <Star className="is-favorite" size={13} fill="currentColor" /> : null}
+                {folder.hidden ? <EyeOff className="is-hidden" size={13} /> : null}
+              </span> : null}
+            </button>
             {editing === folder.path ? <form className="folder-alias-form" onSubmit={(event) => { event.preventDefault(); void onUpdate(folder, { alias }).then((saved) => saved && setEditing(null)); }}><input autoFocus value={alias} maxLength={160} disabled={pending} onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => event.key === "Escape" && !pending && setEditing(null)} aria-label={`Alias for ${folder.name}`} /><button type="submit" disabled={pending}>Save</button></form> : (
               <span className="folder-actions">
-                <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={12} fill={folder.favorite ? "currentColor" : "none"} /></button>
-                <button type="button" disabled={pending} onClick={() => { setEditing(folder.path); setAlias(folder.displayName === folder.name ? "" : folder.displayName); }} title="Edit alias" aria-label="Edit alias"><Pencil size={12} /></button>
-                <button type="button" disabled={pending} className={folder.hidden ? "is-hidden" : ""} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={12} /> : <EyeOff size={12} />}</button>
+                <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
+                <button type="button" disabled={pending} onClick={() => { setEditing(folder.path); setAlias(folder.displayName === folder.name ? "" : folder.displayName); }} title="Edit alias" aria-label="Edit alias"><Pencil size={14} /></button>
+                <button type="button" disabled={pending} className={folder.hidden ? "is-hidden" : ""} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
               </span>
             )}
           </div>
