@@ -30,6 +30,8 @@ The server reads only the directory the user opens. It sorts the supported media
 
 The folder tree requests children only when a node is expanded. The web gallery renders virtual rows and requests more media explicitly.
 
+Technical metadata is also lazy. Opening the viewer does not inspect the source file; the details panel requests only the current item. The server uses sharp and EXIF parsing for images or a bounded `ffprobe` process for videos, and returns partial file information when embedded metadata cannot be decoded.
+
 ## Persistence
 
 SQLite contains four small models:
