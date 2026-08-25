@@ -113,7 +113,7 @@ The service worker caches only the application shell: HTML, JavaScript, CSS, and
 
 Service workers require a secure browser context. Plain HTTP works on `localhost` for development, but access from another computer or phone should use HTTPS through a reverse proxy such as Caddy, Traefik, or nginx. The *these* container continues to serve HTTP internally; TLS termination and certificates stay with the proxy.
 
-When a new frontend version is deployed, it is downloaded and activated automatically instead of waiting for every open *these* tab or installed window to close. An active session is never force-reloaded, so reopen it to display the updated interface immediately.
+When a new frontend version is deployed, it is downloaded and activated automatically instead of waiting for every open *these* tab or installed window to close. Open browser tabs and installed apps reload automatically once the update is ready.
 
 Here `/volume1/photos` is the real host directory and `/media/photos` is its stable path inside the container. Add `/media/photos` in *these* after the service starts. The display label can be anything you like.
 
