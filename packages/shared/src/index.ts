@@ -29,6 +29,7 @@ export interface MediaEntry {
 export interface BrowseResponse {
   path: string;
   root: MediaRoot;
+  currentFolder: FolderEntry;
   folders: FolderEntry[];
   media: MediaEntry[];
   totalMedia: number;
