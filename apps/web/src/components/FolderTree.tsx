@@ -1,8 +1,9 @@
 import { ChevronRight, Folder, FolderHeart, HardDrive, PanelLeftClose } from "lucide-react";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import type { BrowseResponse, FolderEntry } from "@these/shared";
 import { api, isAbortError, query } from "../lib/api";
+import { clampFolderSidebarWidth, folderSidebarWidth } from "../lib/preferences";
 import { useApp } from "../state/app-context";
 
 interface TreeNodeProps {
@@ -68,15 +69,95 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
 const emptyHiddenOverrides = new Map<string, boolean>();
 
 export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides, onClose, onNavigate, modal = false }: { currentPath: string | null; hiddenOverrides?: ReadonlyMap<string, boolean>; onClose?: () => void; onNavigate?: () => void; modal?: boolean }) {
-  const { bootstrap, preferences } = useApp();
+  const { bootstrap, preferences, setPreferences } = useApp();
   const navigate = useNavigate();
+  const sidebar = useRef<HTMLElement>(null);
+  const separator = useRef<HTMLDivElement>(null);
+  const resizeSession = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
+  const [maximumWidth, setMaximumWidth] = useState(getFolderSidebarMaximumWidth);
+  const renderedWidth = clampFolderSidebarWidth(preferences.leftSidebarWidth, maximumWidth);
+  const width = useRef(renderedWidth);
+  if (!resizeSession.current) width.current = renderedWidth;
+
+  useEffect(() => {
+    const updateMaximumWidth = () => setMaximumWidth(getFolderSidebarMaximumWidth());
+    window.addEventListener("resize", updateMaximumWidth);
+    return () => window.removeEventListener("resize", updateMaximumWidth);
+  }, []);
+
+  const applyWidth = useCallback((nextWidth: number) => {
+    const clampedWidth = clampFolderSidebarWidth(nextWidth, maximumWidth);
+    width.current = clampedWidth;
+    sidebar.current?.style.setProperty("--folder-sidebar-width", `${clampedWidth}px`);
+    separator.current?.setAttribute("aria-valuenow", String(clampedWidth));
+    separator.current?.setAttribute("aria-valuetext", `${clampedWidth} pixels`);
+    return clampedWidth;
+  }, [maximumWidth]);
+
+  const finishResize = useCallback((nextWidth: number) => {
+    const clampedWidth = applyWidth(nextWidth);
+    setPreferences({ leftSidebarWidth: clampedWidth });
+  }, [applyWidth, setPreferences]);
+
+  const startResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const panelWidth = sidebar.current?.getBoundingClientRect().width ?? 0;
+    resizeSession.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: panelWidth || width.current,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }, []);
+
+  useEffect(() => {
+    const continueResize = (event: PointerEvent) => {
+      const session = resizeSession.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      applyWidth(session.startWidth + event.clientX - session.startX);
+    };
+    const endResize = (event: PointerEvent) => {
+      const session = resizeSession.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      resizeSession.current = null;
+      if (separator.current?.hasPointerCapture?.(event.pointerId)) separator.current.releasePointerCapture(event.pointerId);
+      finishResize(width.current);
+    };
+    const cancelResize = (event: PointerEvent) => {
+      const session = resizeSession.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      resizeSession.current = null;
+      applyWidth(session.startWidth);
+    };
+    window.addEventListener("pointermove", continueResize);
+    window.addEventListener("pointerup", endResize);
+    window.addEventListener("pointercancel", cancelResize);
+    return () => {
+      window.removeEventListener("pointermove", continueResize);
+      window.removeEventListener("pointerup", endResize);
+      window.removeEventListener("pointercancel", cancelResize);
+    };
+  }, [applyWidth, finishResize]);
+
+  const resizeWithKeyboard = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let nextWidth: number | null = null;
+    if (event.key === "ArrowLeft") nextWidth = width.current - folderSidebarWidth.keyboardStep;
+    else if (event.key === "ArrowRight") nextWidth = width.current + folderSidebarWidth.keyboardStep;
+    else if (event.key === "Home") nextWidth = folderSidebarWidth.min;
+    else if (event.key === "End") nextWidth = maximumWidth;
+    if (nextWidth === null) return;
+    event.preventDefault();
+    finishResize(nextWidth);
+  }, [finishResize, maximumWidth]);
+
   const open = useCallback((folderPath: string) => {
     navigate(`/browse?${query({ path: folderPath })}`);
     onNavigate?.();
   }, [navigate, onNavigate]);
   const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides))) ?? [];
   return (
-    <aside id="folder-sidebar" className="side-panel left-panel" role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined}>
+    <aside ref={sidebar} id="folder-sidebar" className="side-panel left-panel" role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined} style={{ "--folder-sidebar-width": `${renderedWidth}px` } as CSSProperties}>
       <div className="panel-heading"><span>Folders</span>{onClose ? <button className="icon-button panel-close" type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
       {visibleFavorites.length ? (
         <section className="border-b border-default pb-2">
@@ -96,8 +177,14 @@ export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides
           );
         })}
       </div>
+      {!modal ? <div ref={separator} className="folder-sidebar-resizer" role="separator" aria-label="Resize folder sidebar" aria-orientation="vertical" aria-valuemin={folderSidebarWidth.min} aria-valuemax={maximumWidth} aria-valuenow={renderedWidth} aria-valuetext={`${renderedWidth} pixels`} tabIndex={0} title="Resize folders" onPointerDown={startResize} onKeyDown={resizeWithKeyboard} /> : null}
     </aside>
   );
+}
+
+function getFolderSidebarMaximumWidth() {
+  if (typeof window === "undefined") return folderSidebarWidth.max;
+  return Math.max(folderSidebarWidth.min, Math.min(folderSidebarWidth.max, Math.floor(window.innerWidth * folderSidebarWidth.viewportRatio)));
 }
 
 function isEffectivelyHidden(folderPath: string, fallback: boolean, overrides: ReadonlyMap<string, boolean>) {

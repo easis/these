@@ -4,16 +4,26 @@ export interface LocalPreferences {
   theme: ThemePreference;
   thumbnailSize: number;
   leftSidebarOpen: boolean;
+  leftSidebarWidth: number;
   rightSidebarOpen: boolean;
   showHidden: boolean;
   lastFolder: string | null;
 }
 
 const key = "these.preferences.v1";
+export const folderSidebarWidth = {
+  default: 300,
+  min: 220,
+  max: 480,
+  viewportRatio: 0.42,
+  keyboardStep: 16,
+} as const;
+
 export const defaultPreferences: LocalPreferences = {
   theme: "system",
   thumbnailSize: 180,
   leftSidebarOpen: true,
+  leftSidebarWidth: folderSidebarWidth.default,
   rightSidebarOpen: true,
   showHidden: false,
   lastFolder: null,
@@ -21,10 +31,21 @@ export const defaultPreferences: LocalPreferences = {
 
 export function readPreferences(): LocalPreferences {
   try {
-    return { ...defaultPreferences, ...JSON.parse(localStorage.getItem(key) ?? "{}") };
+    const stored = JSON.parse(localStorage.getItem(key) ?? "{}") as Partial<LocalPreferences>;
+    return {
+      ...defaultPreferences,
+      ...stored,
+      leftSidebarWidth: clampFolderSidebarWidth(stored.leftSidebarWidth),
+    };
   } catch {
     return defaultPreferences;
   }
+}
+
+export function clampFolderSidebarWidth(value: unknown, maximum: number = folderSidebarWidth.max) {
+  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : folderSidebarWidth.default;
+  const cappedMaximum = Math.max(folderSidebarWidth.min, Math.min(maximum, folderSidebarWidth.max));
+  return Math.round(Math.max(folderSidebarWidth.min, Math.min(numericValue, cappedMaximum)));
 }
 
 export function writePreferences(value: LocalPreferences) {

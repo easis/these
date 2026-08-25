@@ -14,6 +14,7 @@ vi.mock("../lib/preferences", () => ({
     theme: "light",
     thumbnailSize: 180,
     leftSidebarOpen: true,
+    leftSidebarWidth: 300,
     rightSidebarOpen: true,
     showHidden: false,
     lastFolder: null,
