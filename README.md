@@ -35,7 +35,7 @@
 
 ### Browse the filesystem, not a catalog
 
-The three-pane browser keeps folders, media, and active lists in one place. Filter the open folder by filename or media type, resize thumbnails, and classify files without leaving the gallery.
+The three-pane browser keeps folders, media, and active lists in one place. Search the open folder by media filename, immediate subfolder name, or folder alias; filter by media type, resize thumbnails, and classify files without leaving the gallery.
 
 ### Inspect and classify without breaking your flow
 
@@ -246,11 +246,11 @@ The runtime image contains Node.js, the Fastify server, the compiled React appli
 ## Current limitations
 
 - Single-user; no built-in authentication.
-- No global or fuzzy search. Filename filtering applies to the open folder.
+- No global, recursive, or fuzzy search. Search applies only to the immediate contents of the open folder.
 - Folder moves are repaired manually rather than detected automatically.
 - Directory symlinks are hidden; direct symlink paths cannot escape a root.
 - The list review screen loads up to 1,000 items. Downloads use a larger bounded set and stream their contents.
-- Mobile supports basic access, while the primary layout targets desktop and tablet.
+- Mobile uses touch-first navigation and a compact options sheet; the media viewer remains deliberately focused on one item at a time.
 
 ## License
 

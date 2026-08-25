@@ -123,6 +123,29 @@ describe("These API", () => {
     });
   });
 
+  it("filters immediate folders by their name or visible alias", async () => {
+    const cats = path.join(root, "Cat originals");
+    const trips = path.join(root, "summer-archive");
+    const hidden = path.join(root, "hidden-cats");
+    await Promise.all([mkdir(cats), mkdir(trips), mkdir(hidden)]);
+    await Promise.all([
+      app!.inject({ method: "POST", url: "/api/folder-metadata", payload: { path: trips, alias: "Family Trips" } }),
+      app!.inject({ method: "POST", url: "/api/folder-metadata", payload: { path: hidden, hidden: true } }),
+    ]);
+
+    const byName = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}&filter=CAT` });
+    expect(byName.statusCode).toBe(200);
+    expect(byName.json<BrowseResponse>().folders).toMatchObject([{ name: "Cat originals", displayName: "Cat originals" }]);
+
+    const byAlias = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}&filter=family&kinds=video` });
+    expect(byAlias.json<BrowseResponse>().folders).toMatchObject([{ name: "summer-archive", displayName: "Family Trips" }]);
+
+    const hiddenByDefault = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}&filter=hidden` });
+    expect(hiddenByDefault.json<BrowseResponse>().folders).toEqual([]);
+    const hiddenShown = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}&filter=hidden&showHidden=true` });
+    expect(hiddenShown.json<BrowseResponse>().folders).toMatchObject([{ name: "hidden-cats", hidden: true }]);
+  });
+
   it("filters media kinds before filename matching and pagination", async () => {
     await Promise.all([
       writeFile(path.join(root, "cat-photo.jpg"), "one"),
