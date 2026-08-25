@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+coverage/
+.env*
+!.env.example
+data/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+.these-dev/

@@ -1,0 +1,13 @@
+services:
+  these:
+    build: .
+    image: these:local
+    container_name: these
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./data:/data
+      - /volume1/photos:/media/photos:ro
+      - /volume1/downloads:/media/downloads:ro
+      - /volume1/videos:/media/videos:ro
