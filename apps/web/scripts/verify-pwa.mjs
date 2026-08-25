@@ -38,6 +38,8 @@ for (const required of ["index.html", "manifest.webmanifest", "pwa-192x192.png",
 assert(!precachedPaths.some((entry) => entry.startsWith("api/")), "service worker must not precache API routes");
 assert((serviceWorker.match(/\.registerRoute\(/g) ?? []).length === 1, "service worker must not add runtime cache routes");
 assert(/denylist:\[\/\^\\\/api/.test(serviceWorker), "navigation fallback must exclude /api");
+assert(serviceWorker.includes(".skipWaiting()"), "service worker updates must activate without waiting for existing clients to close");
+assert(serviceWorker.includes(".clientsClaim()"), "updated service workers must claim existing clients");
 
 console.log("PWA artifacts verified.");
 
