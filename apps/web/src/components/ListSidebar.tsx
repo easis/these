@@ -45,7 +45,7 @@ export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?:
                 <span className="active-ring" aria-hidden="true" />
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-sm font-medium">{list.name}</span>
-                  <span className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
+                  <span className="list-select-counts mt-0.5 flex items-center gap-2 text-muted">
                     <span className="inline-flex items-center gap-1"><Check size={11} />{list.selectedCount}</span>
                     <span className="inline-flex items-center gap-1"><CircleHelp size={11} />{list.maybeCount}</span>
                   </span>
