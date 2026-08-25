@@ -146,6 +146,22 @@ describe("These API", () => {
     expect(hiddenShown.json<BrowseResponse>().folders).toMatchObject([{ name: "hidden-cats", hidden: true }]);
   });
 
+  it("sorts GUID folder names lexicographically instead of numerically", async () => {
+    const names = [
+      "2fffffff-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "10000000-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    ];
+    await Promise.all(names.map((name) => mkdir(path.join(root, name))));
+
+    const response = await app!.inject({ method: "GET", url: `/api/browse?path=${encodeURIComponent(root)}` });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json<BrowseResponse>().folders.map((folder) => folder.name)).toEqual([
+      "10000000-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "2fffffff-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    ]);
+  });
+
   it("filters media kinds before filename matching and pagination", async () => {
     await Promise.all([
       writeFile(path.join(root, "cat-photo.jpg"), "one"),

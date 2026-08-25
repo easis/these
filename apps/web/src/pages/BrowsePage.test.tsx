@@ -690,6 +690,31 @@ describe("BrowsePage requests", () => {
     expect(screen.getByText("photo.jpg")).toBeInTheDocument();
   });
 
+  it("keeps GUID folders lexicographically sorted during optimistic updates", async () => {
+    const update = deferred<unknown>();
+    const firstName = "10000000-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const secondName = "2fffffff-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const folders = [firstName, secondName].map((name) => ({
+      path: `/media/${name}`,
+      name,
+      displayName: name,
+      hidden: false,
+      favorite: false,
+    }));
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/folder-metadata" && init?.method === "POST") return update.promise;
+      return Promise.resolve(browseResponse("/media", 0, { folders }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    const firstFolder = (await screen.findByText(firstName)).closest<HTMLElement>(".folder-item")!;
+    fireEvent.click(within(firstFolder).getByRole("button", { name: "Edit alias" }));
+    fireEvent.change(screen.getByRole("textbox", { name: `Alias for ${firstName}` }), { target: { value: firstName } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(Array.from(document.querySelectorAll(".folder-open"), (element) => element.textContent)).toEqual([firstName, secondName]);
+  });
+
   it("hides a folder from the left sidebar optimistically and restores it on failure", async () => {
     const update = deferred<unknown>();
     const photos = { path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false };
