@@ -1,0 +1,17 @@
+{
+  "name": "these",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @these/server --filter @these/web dev",
+    "build": "pnpm --filter @these/shared build && pnpm --filter @these/web build && pnpm --filter @these/server build",
+    "start": "pnpm --filter @these/server start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @these/server test && pnpm --filter @these/web test",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
