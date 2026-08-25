@@ -2,18 +2,17 @@ import { ArrowRight, Check, CircleHelp, Download, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { TheseList } from "@these/shared";
+import { TextInputDialog } from "../components/TextInputDialog";
 import { startListDownload } from "../lib/downloads";
 import { useApp } from "../state/app-context";
 
 export function ListsPage() {
   const { bootstrap, activeList, createList, setActiveList } = useApp();
-  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
   return (
     <div className="page-scroll"><div className="content-page">
-      <div className="page-title-row"><div><p className="eyebrow">Selections</p><h1>Lists</h1><p>Each list keeps one state per file: Selected or Maybe.</p></div></div>
-      <form className="new-list-bar" onSubmit={async (event) => { event.preventDefault(); if (!name.trim()) return; await createList(name); setName(""); }}>
-        <Plus size={16} /><input value={name} onChange={(event) => setName(event.target.value)} placeholder="New list name" maxLength={100} aria-label="New list name" /><button type="submit" disabled={!name.trim()}>Create list</button>
-      </form>
+      <div className="page-title-row"><div><p className="eyebrow">Selections</p><h1>Lists</h1><p>Each list keeps one state per file: Selected or Maybe.</p></div><button className="compact-button primary" type="button" onClick={() => setCreating(true)}><Plus size={14} />New list</button></div>
+      {creating ? <TextInputDialog title="Create list" label="List name" placeholder="Archive" maxLength={100} submitLabel="Create list" pendingLabel="Creating…" onSubmit={async (name) => { await createList(name); }} onClose={() => setCreating(false)} /> : null}
       {bootstrap?.lists.length ? <div className="list-index">
         {bootstrap.lists.map((list) => (
           <article key={list.id} className={`list-index-row ${activeList?.id === list.id ? "is-active" : ""}`}>
@@ -23,7 +22,7 @@ export function ListsPage() {
             <Link className="icon-button" to={`/lists/${list.id}`} aria-label={`Open ${list.name}`}><ArrowRight size={16} /></Link>
           </article>
         ))}
-      </div> : <div className="empty-state"><ListEmptyMark /><h2>No lists yet</h2><p>Create a list above, then make it active when you are ready to start selecting.</p></div>}
+      </div> : <div className="empty-state"><ListEmptyMark /><h2>No lists yet</h2><p>Create a list, then make it active when you are ready to start selecting.</p></div>}
     </div></div>
   );
 }

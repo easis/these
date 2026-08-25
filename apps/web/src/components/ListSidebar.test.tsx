@@ -69,15 +69,16 @@ describe("ListSidebar", () => {
     render(<MemoryRouter><ListSidebar /></MemoryRouter>);
 
     fireEvent.click(screen.getByRole("button", { name: "New list" }));
-    const create = screen.getByRole("button", { name: "Create" });
+    expect(screen.getByRole("dialog", { name: "Create list" })).toBeInTheDocument();
+    const create = screen.getByRole("button", { name: "Create list" });
     expect(create).toBeDisabled();
     fireEvent.change(screen.getByRole("textbox", { name: "List name" }), { target: { value: "Archive" } });
     fireEvent.click(create);
     await waitFor(() => expect(mocks.createList).toHaveBeenCalledWith("Archive"));
 
     fireEvent.click(screen.getByRole("button", { name: "New list" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel new list" }));
-    expect(screen.queryByRole("textbox", { name: "List name" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Create list" })).not.toBeInTheDocument();
   });
 
   it("blocks duplicate creation submissions while the request is pending", async () => {
@@ -87,15 +88,15 @@ describe("ListSidebar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New list" }));
     const input = screen.getByRole("textbox", { name: "List name" });
-    const create = screen.getByRole("button", { name: "Create" });
-    const cancel = screen.getByRole("button", { name: "Cancel new list" });
+    const create = screen.getByRole("button", { name: "Create list" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
     const form = input.closest("form")!;
     fireEvent.change(input, { target: { value: "Archive" } });
     fireEvent.submit(form);
     fireEvent.submit(form);
 
     expect(mocks.createList).toHaveBeenCalledTimes(1);
-    expect(form).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("dialog", { name: "Create list" })).toHaveAttribute("aria-busy", "true");
     expect(input).toBeDisabled();
     expect(create).toBeDisabled();
     expect(cancel).toBeDisabled();

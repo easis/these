@@ -1,14 +1,12 @@
-import { Check, CircleHelp, PanelRightClose, Plus, Settings2, X } from "lucide-react";
+import { Check, CircleHelp, PanelRightClose, Plus, Settings2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../state/app-context";
+import { TextInputDialog } from "./TextInputDialog";
 
 export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?: () => void; onSelection?: () => void; modal?: boolean }) {
   const { bootstrap, activeList, setActiveList, createList } = useApp();
   const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
   const [activating, setActivating] = useState(false);
   const activatingRef = useRef(false);
   const [activationError, setActivationError] = useState<string | null>(null);
@@ -35,30 +33,8 @@ export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?:
           {onClose ? <button className="icon-button panel-close" type="button" onClick={onClose} title="Close lists" aria-label="Close lists"><PanelRightClose size={15} /></button> : null}
         </span>
       </div>
-      {creating ? (
-        <form className="list-create-form" onSubmit={async (event) => {
-          event.preventDefault();
-          if (submittingRef.current || !name.trim()) return;
-          submittingRef.current = true;
-          setSubmitting(true);
-          try {
-            await createList(name);
-            setName("");
-            setCreating(false);
-          } catch {
-            // Keep the form open so the user can retry.
-          } finally {
-            submittingRef.current = false;
-            setSubmitting(false);
-          }
-        }} aria-busy={submitting}>
-          <input autoFocus className="compact-input" placeholder="List name" aria-label="List name" maxLength={100} value={name} disabled={submitting} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && !submitting) { setName(""); setCreating(false); } }} />
-          <span className="list-create-actions">
-            <button className="compact-button primary" type="submit" disabled={submitting || !name.trim()}>Create</button>
-            <button className="icon-button" type="button" title="Cancel new list" aria-label="Cancel new list" disabled={submitting} onClick={() => { setName(""); setCreating(false); }}><X size={14} /></button>
-          </span>
-        </form>
-      ) : <button className="list-create-trigger" type="button" onClick={() => setCreating(true)}><Plus size={14} />New list</button>}
+      <button className="list-create-trigger" type="button" onClick={() => setCreating(true)}><Plus size={14} />New list</button>
+      {creating ? <TextInputDialog title="Create list" label="List name" placeholder="Archive" maxLength={100} submitLabel="Create list" pendingLabel="Creating…" onSubmit={async (name) => { await createList(name); }} onClose={() => setCreating(false)} /> : null}
       {activationError ? <div className="inline-error mx-1.5 mb-2" role="alert">{activationError}</div> : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
         {bootstrap?.lists.length ? bootstrap.lists.map((list) => {

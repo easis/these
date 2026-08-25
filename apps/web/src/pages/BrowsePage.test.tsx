@@ -148,7 +148,7 @@ describe("BrowsePage requests", () => {
     expect(mocks.setPreferences).not.toHaveBeenCalledWith({ leftSidebarOpen: false });
   });
 
-  it("keeps dynamically rendered list controls inside the compact focus loop", () => {
+  it("gives the text dialog priority over the compact panel focus loop", () => {
     const compactViewport = {
       matches: true,
       addEventListener: vi.fn(),
@@ -160,14 +160,11 @@ describe("BrowsePage requests", () => {
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "New list" }));
-    const close = screen.getByRole("button", { name: "Close lists" });
-    const cancel = screen.getByRole("button", { name: "Cancel new list" });
-
-    cancel.focus();
-    fireEvent.keyDown(window, { key: "Tab" });
-    expect(close).toHaveFocus();
-    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
-    expect(cancel).toHaveFocus();
+    const input = screen.getByRole("textbox", { name: "List name" });
+    expect(input).toHaveFocus();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Create list" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close lists" })).toBeInTheDocument();
   });
 
   it("opens an accessible compact options sheet and restores focus on dismissal", async () => {
@@ -702,9 +699,16 @@ describe("BrowsePage requests", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit current folder alias" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Alias for photos" }), { target: { value: "Portfolio" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/folder-metadata", expect.objectContaining({
       body: JSON.stringify({ path: "/media/photos", alias: "Portfolio" }),
+    })));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit current folder alias" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Alias for photos" }), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
+    await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/folder-metadata", expect.objectContaining({
+      body: JSON.stringify({ path: "/media/photos", alias: "" }),
     })));
 
     fireEvent.click(await screen.findByRole("button", { name: "Hide current folder" }));
@@ -753,9 +757,33 @@ describe("BrowsePage requests", () => {
     const firstFolder = (await screen.findByText(firstName)).closest<HTMLElement>(".folder-item")!;
     fireEvent.click(within(firstFolder).getByRole("button", { name: "Edit alias" }));
     fireEvent.change(screen.getByRole("textbox", { name: `Alias for ${firstName}` }), { target: { value: firstName } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
 
     expect(Array.from(document.querySelectorAll(".folder-open"), (element) => element.textContent)).toEqual([firstName, secondName]);
+  });
+
+  it("returns focus to search when a renamed folder leaves the active filter", async () => {
+    const update = deferred<{ alias: string; favorite: boolean; hidden: boolean }>();
+    const trips = { path: "/media/journeys", name: "journeys", displayName: "Trips", hidden: false, favorite: false };
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/folder-metadata" && init?.method === "POST") return update.promise;
+      return Promise.resolve(browseResponse("/media", 0, { folders: [trips] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    const search = screen.getByLabelText("Search files and folders");
+    fireEvent.change(search, { target: { value: "Trips" } });
+    const folder = (await screen.findByText("Trips")).closest<HTMLElement>(".folder-item")!;
+    const editAlias = within(folder).getByRole("button", { name: "Edit alias" });
+    editAlias.focus();
+    fireEvent.click(editAlias);
+    fireEvent.change(screen.getByRole("textbox", { name: "Alias for journeys" }), { target: { value: "Holiday" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
+    expect(editAlias).not.toBeInTheDocument();
+
+    await act(async () => update.resolve({ alias: "Holiday", favorite: false, hidden: false }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit folder alias" })).not.toBeInTheDocument());
+    expect(search).toHaveFocus();
   });
 
   it("hides a folder from the left sidebar optimistically and restores it on failure", async () => {
@@ -813,13 +841,16 @@ describe("BrowsePage requests", () => {
     expect(await screen.findByRole("button", { name: /Trips/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit alias" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Alias for trips" }), { target: { value: "Holiday" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
 
     fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "cats" } });
     expect(await screen.findByText("No files or folders match this search.")).toBeInTheDocument();
 
     await act(async () => update.reject(new Error("Could not save the alias.")));
-    expect(await screen.findByText("Could not save the alias.")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Edit folder alias" });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Could not save the alias.");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Alias for trips" }), { target: { value: "Weekend" } });
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Trips/ })).not.toBeInTheDocument();
   });
 

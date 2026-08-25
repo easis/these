@@ -1,8 +1,9 @@
 import { Check, ChevronDown, CircleHelp, Download, Pencil, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ListItem, ListItemStatus } from "@these/shared";
 import { MediaTile } from "../components/MediaTile";
+import { TextInputDialog } from "../components/TextInputDialog";
 import { Viewer } from "../components/Viewer";
 import { api } from "../lib/api";
 import { startListDownload, type ListDownloadStatus } from "../lib/downloads";
@@ -17,8 +18,6 @@ export function ListPage() {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [savingName, setSavingName] = useState(false);
   const load = useCallback(async () => {
     try { setItems(await api<ListItem[]>(`/api/lists/${id}/items?limit=1000`)); setError(null); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not load this list."); }
@@ -34,33 +33,11 @@ export function ListPage() {
   const selected = items.filter((item) => item.status === "selected");
   const maybe = items.filter((item) => item.status === "maybe");
   const viewerItems = items.filter((item) => !item.missing);
-  const renameList = async (event: FormEvent) => {
-    event.preventDefault();
-    const name = nameDraft.trim();
-    if (!list || !name) return;
-    setSavingName(true);
-    try {
-      await api(`/api/lists/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
-      await refresh();
-      setEditingName(false);
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not rename this list.");
-    } finally {
-      setSavingName(false);
-    }
-  };
   if (!list && bootstrap) return <div className="page-scroll"><div className="empty-state"><h2>List not found</h2><Link to="/lists">Return to lists</Link></div></div>;
   return (
     <div className="page-scroll"><div className="wide-page">
       <div className="page-title-row list-detail-title">
-        <div><p className="eyebrow">List</p>{editingName ? (
-          <form className="list-name-form" onSubmit={(event) => void renameList(event)}>
-            <input autoFocus value={nameDraft} maxLength={100} aria-label="List name" onChange={(event) => setNameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setEditingName(false); }} />
-            <button className="compact-button primary" type="submit" disabled={savingName || !nameDraft.trim()}>{savingName ? "Saving…" : "Save"}</button>
-            <button className="compact-button" type="button" onClick={() => setEditingName(false)}>Cancel</button>
-          </form>
-        ) : <div className="list-name-row"><h1>{list?.name ?? "Loading…"}</h1>{list ? <button className="icon-button" type="button" title="Edit list name" aria-label="Edit list name" onClick={() => { setNameDraft(list.name); setEditingName(true); }}><Pencil size={14} /></button> : null}</div>}<p>{selected.length} selected · {maybe.length} maybe</p></div>
+        <div><p className="eyebrow">List</p><div className="list-name-row"><h1>{list?.name ?? "Loading…"}</h1>{list ? <button className="icon-button" type="button" title="Edit list name" aria-label="Edit list name" onClick={() => setEditingName(true)}><Pencil size={14} /></button> : null}</div><p>{selected.length} selected · {maybe.length} maybe</p></div>
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           {activeList?.id !== id ? <button className="compact-button" type="button" onClick={() => void setActiveList(id)}>Make active</button> : <span className="active-badge"><span className="status-dot is-selected" />Active</span>}
           <ListDownloadControl listId={id} selectedCount={list?.selectedCount ?? selected.length} maybeCount={list?.maybeCount ?? maybe.length} />
@@ -70,6 +47,7 @@ export function ListPage() {
           }}><Trash2 size={14} /></button>
         </div>
       </div>
+      {editingName && list ? <TextInputDialog title="Rename list" label="List name" initialValue={list.name} maxLength={100} submitLabel="Save name" onSubmit={async (name) => { await api(`/api/lists/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }); await refresh(); setError(null); }} onClose={() => setEditingName(false)} /> : null}
       {error ? <div className="inline-error">{error}</div> : null}
       <ListGroup title="Selected" icon={<Check size={14} />} items={selected} empty="No selected media." onStatus={setStatus} onOpen={(item) => setViewerIndex(viewerItems.findIndex((entry) => entry.path === item.path))} />
       <ListGroup title="Maybe" icon={<CircleHelp size={14} />} items={maybe} empty="No maybe media." onStatus={setStatus} onOpen={(item) => setViewerIndex(viewerItems.findIndex((entry) => entry.path === item.path))} />
