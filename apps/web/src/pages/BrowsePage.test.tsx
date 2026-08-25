@@ -170,6 +170,43 @@ describe("BrowsePage requests", () => {
     expect(cancel).toHaveFocus();
   });
 
+  it("opens an accessible compact options sheet and restores focus on dismissal", async () => {
+    const compactViewport = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("matchMedia", vi.fn(() => compactViewport));
+    mocks.api.mockResolvedValue(browseResponse("/media/trip", 0));
+
+    render(<div className="app-shell">
+      <header className="app-header"><button type="button">Theme</button></header>
+      <main className="app-content"><MemoryRouter initialEntries={["/browse?path=%2Fmedia%2Ftrip"]}><BrowsePage /></MemoryRouter></main>
+      <nav className="mobile-navigation"><a href="/lists">Lists navigation</a></nav>
+    </div>);
+    const trigger = screen.getByRole("button", { name: "Show browser options" });
+    fireEvent.click(trigger);
+
+    const sheet = screen.getByRole("dialog", { name: "Browser options" });
+    const close = screen.getByRole("button", { name: "Close browser options" });
+    expect(sheet).toHaveAttribute("aria-modal", "true");
+    expect(document.querySelector(".gallery-panel")).toHaveAttribute("inert");
+    expect(document.querySelector(".app-header")).toHaveAttribute("inert");
+    expect(document.querySelector(".mobile-navigation")).toHaveAttribute("inert");
+    expect(close).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: /Hidden folders/ }));
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ showHidden: true });
+    fireEvent.change(screen.getByLabelText("Thumbnail size"), { target: { value: "220" } });
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ thumbnailSize: 220 });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Browser options" })).not.toBeInTheDocument();
+    expect(document.querySelector(".app-header")).not.toHaveAttribute("inert");
+    expect(document.querySelector(".mobile-navigation")).not.toHaveAttribute("inert");
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it("does not let a slow response from the previous folder replace the current one", async () => {
     const pending = new Map<string, (response: BrowseResponse) => void>();
     mocks.api.mockImplementation((url: string) => new Promise<BrowseResponse>((resolve) => {
@@ -223,7 +260,7 @@ describe("BrowsePage requests", () => {
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     expect(await screen.findByText("old.jpg")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "new" } });
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "new" } });
     await waitFor(() => expect(requests).toBe(2));
 
     expect(screen.getByText("old.jpg")).toBeInTheDocument();
@@ -247,7 +284,7 @@ describe("BrowsePage requests", () => {
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     expect(await screen.findByText("old.jpg")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "broken" } });
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "broken" } });
     await waitFor(() => expect(requests).toBe(2));
 
     await act(async () => failedRequest.reject(new Error("Temporary browse failure.")));
@@ -255,7 +292,7 @@ describe("BrowsePage requests", () => {
     expect(screen.getByText("old.jpg")).toBeInTheDocument();
     expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "recovered" } });
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "recovered" } });
     expect(await screen.findByText("recovered.jpg")).toBeInTheDocument();
     expect(screen.queryByText("Temporary browse failure.")).not.toBeInTheDocument();
     expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
@@ -272,7 +309,7 @@ describe("BrowsePage requests", () => {
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     expect(await screen.findByRole("button", { name: /Photos/ })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "photo" } });
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "photo" } });
     await waitFor(() => expect(requests).toBe(2));
 
     expect(screen.getByRole("button", { name: /Photos/ })).toBeInTheDocument();
@@ -308,7 +345,7 @@ describe("BrowsePage requests", () => {
     await waitFor(() => expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-maybe"));
   });
 
-  it("sends the filename filter to the backend and keeps server pagination", async () => {
+  it("sends the combined search to the backend and keeps server pagination", async () => {
     mocks.api.mockImplementation(async (url: string) => {
       const parameters = new URL(url, "http://these.test").searchParams;
       const filter = parameters.get("filter") ?? "";
@@ -330,7 +367,7 @@ describe("BrowsePage requests", () => {
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     expect(await screen.findByText("2 media · 0 folders")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter filenames"), { target: { value: "Cat" } });
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "Cat" } });
     await waitFor(() => expect(mocks.api.mock.calls.some(([url]) => new URL(url as string, "http://these.test").searchParams.get("filter") === "Cat")).toBe(true));
 
     const loadMore = await screen.findByRole("button", { name: "Load more" });
@@ -339,6 +376,33 @@ describe("BrowsePage requests", () => {
       const parameters = new URL(url as string, "http://these.test").searchParams;
       return parameters.get("filter") === "Cat" && parameters.get("offset") === "1";
     })).toBe(true));
+  });
+
+  it("renders matching folders, clears the combined search, and only shows the empty state when nothing matches", async () => {
+    mocks.api.mockImplementation(async (url: string) => {
+      const search = new URL(url, "http://these.test").searchParams.get("filter") ?? "";
+      if (search === "trip") {
+        return browseResponse("/media", 0, {
+          folders: [{ path: "/media/trips", name: "trips", displayName: "Family trips", hidden: false, favorite: false }],
+        });
+      }
+      return browseResponse("/media", 0);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    const search = screen.getByLabelText("Search files and folders");
+    fireEvent.change(search, { target: { value: "trip" } });
+    expect(await screen.findByRole("button", { name: /Family trips/ })).toBeInTheDocument();
+    expect(screen.queryByText("No files or folders match this search.")).not.toBeInTheDocument();
+
+    const requestsBeforeClear = mocks.api.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    await waitFor(() => expect(search).toHaveValue(""));
+    await waitFor(() => expect(mocks.api.mock.calls.length).toBeGreaterThan(requestsBeforeClear));
+    expect(new URL(mocks.api.mock.calls.at(-1)![0] as string, "http://these.test").searchParams.get("filter")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "missing" } });
+    expect(await screen.findByText("No files or folders match this search.")).toBeInTheDocument();
   });
 
   it("prefetches from the last loaded item and queues one advance without duplicate requests", async () => {
@@ -666,6 +730,29 @@ describe("BrowsePage requests", () => {
     expect(await screen.findByText("Could not save the favorite.")).toBeInTheDocument();
     expect(screen.getByText("new.jpg")).toBeInTheDocument();
     expect(screen.queryByTitle("/media/old")).not.toBeInTheDocument();
+  });
+
+  it("does not restore a failed folder mutation into a different search", async () => {
+    const update = deferred<unknown>();
+    const trips = { path: "/media/trips", name: "trips", displayName: "Trips", hidden: false, favorite: false };
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/folder-metadata" && init?.method === "POST") return update.promise;
+      const filter = new URL(url, "http://these.test").searchParams.get("filter") ?? "";
+      return Promise.resolve(browseResponse("/media", 0, { folders: filter === "cats" ? [] : [trips] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByRole("button", { name: /Trips/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit alias" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Alias for trips" }), { target: { value: "Holiday" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "cats" } });
+    expect(await screen.findByText("No files or folders match this search.")).toBeInTheDocument();
+
+    await act(async () => update.reject(new Error("Could not save the alias.")));
+    expect(await screen.findByText("Could not save the alias.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Trips/ })).not.toBeInTheDocument();
   });
 
   it("rolls back a failed optimistic classification without replacing the gallery", async () => {

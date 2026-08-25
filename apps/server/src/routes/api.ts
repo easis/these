@@ -65,6 +65,7 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
       hidden: currentMetadata?.hidden ?? false,
       favorite: currentMetadata?.favorite ?? false,
     };
+    const searchFilter = request.query.filter?.trim().toLowerCase() ?? "";
     const folders = entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => {
@@ -79,9 +80,9 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
         };
       })
       .filter((folder) => showHidden || !folder.hidden)
+      .filter((folder) => !searchFilter || folder.name.toLowerCase().includes(searchFilter) || folder.displayName.toLowerCase().includes(searchFilter))
       .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true }));
 
-    const filenameFilter = request.query.filter?.trim().toLowerCase() ?? "";
     const requestedKinds = parseMediaKinds(request.query.kinds);
     const mediaNames = entries
       .filter((entry) => {
@@ -90,7 +91,7 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
         return kind !== null && requestedKinds.has(kind);
       })
       .map((entry) => entry.name)
-      .filter((name) => !filenameFilter || name.toLowerCase().includes(filenameFilter))
+      .filter((name) => !searchFilter || name.toLowerCase().includes(searchFilter))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     const offset = clampInteger(request.query.offset, 0, 1_000_000, 0);
     const limit = clampInteger(request.query.limit, 1, 250, 120);
