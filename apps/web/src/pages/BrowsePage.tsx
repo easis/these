@@ -16,18 +16,24 @@ export function BrowsePage() {
   const { bootstrap, activeList, preferences, setPreferences, setItemStatus, removeItem, refresh } = useApp();
   const requestedPath = new URLSearchParams(location.search).get("path") ?? preferences.lastFolder ?? bootstrap?.roots.find((root) => root.available)?.path ?? null;
   const [response, setResponse] = useState<BrowseResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [mediaKinds, setMediaKinds] = useState<MediaKind[]>(["image", "video"]);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [viewerAdvancePending, setViewerAdvancePending] = useState(false);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pendingFolderPaths, setPendingFolderPaths] = useState<Set<string>>(() => new Set());
   const [pendingMediaPaths, setPendingMediaPaths] = useState<Set<string>>(() => new Set());
   const [folderHiddenOverrides, setFolderHiddenOverrides] = useState<Map<string, boolean>>(() => new Map());
   const requestSequence = useRef(0);
+  const browseRequest = useRef<{ sequence: number; promise: Promise<boolean> } | null>(null);
   const loadMoreController = useRef<AbortController | null>(null);
+  const loadMoreRequest = useRef<{ sequence: number; promise: Promise<LoadMoreResult> } | null>(null);
+  const autoPrefetchKey = useRef<string | null>(null);
+  const viewerSession = useRef(0);
   const displayedPath = useRef<string | null>(null);
   const previousActiveListId = useRef<number | null | undefined>(undefined);
   const currentActiveListId = useRef(activeList?.id ?? null);
@@ -37,6 +43,7 @@ export function BrowsePage() {
   const optimisticFolderPatches = useRef(new Map<string, FolderPatch>());
   const optimisticMediaStatuses = useRef(new Map<string, ListItemStatus | null>());
   const kinds = mediaKinds.join(",");
+  const loading = browseLoading || loadingMore;
   const error = mutationError ?? requestError;
   currentActiveListId.current = activeList?.id ?? null;
   responseRef.current = response;
@@ -55,12 +62,15 @@ export function BrowsePage() {
   useEffect(() => {
     const sequence = ++requestSequence.current;
     loadMoreController.current?.abort();
+    autoPrefetchKey.current = null;
     const activeListId = activeList?.id ?? null;
     const activeListChanged = previousActiveListId.current !== undefined && previousActiveListId.current !== activeListId;
     previousActiveListId.current = activeListId;
     const navigating = displayedPath.current !== requestedPath;
     if (navigating) {
+      viewerSession.current += 1;
       setViewerIndex(null);
+      setViewerAdvancePending(false);
       setResponse(null);
       setRequestError(null);
       setMutationError(null);
@@ -69,57 +79,132 @@ export function BrowsePage() {
       setResponse((current) => current ? { ...current, media: current.media.map((entry) => entry.status === null ? entry : { ...entry, status: null }) } : current);
     }
     if (!requestedPath) {
-      setLoading(false);
+      browseRequest.current = null;
+      setBrowseLoading(false);
       return;
     }
 
     const controller = new AbortController();
-    setLoading(true);
-    void api<BrowseResponse>(`/api/browse?${query({ path: requestedPath, offset: 0, limit: 180, activeListId: activeList?.id, showHidden: preferences.showHidden, filter, kinds })}`, { signal: controller.signal })
+    setBrowseLoading(true);
+    const operation = api<BrowseResponse>(`/api/browse?${query({ path: requestedPath, offset: 0, limit: 180, activeListId: activeList?.id, showHidden: preferences.showHidden, filter, kinds })}`, { signal: controller.signal })
       .then((next) => {
-        if (sequence !== requestSequence.current) return;
+        if (sequence !== requestSequence.current) return false;
+        const applied = applyOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden);
         displayedPath.current = next.path;
-        setResponse(applyOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden));
+        responseRef.current = applied;
+        setResponse(applied);
         reconcileOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden);
         setRequestError(null);
         setPreferences({ lastFolder: requestedPath });
+        return true;
       })
       .catch((caught: unknown) => {
         if (sequence === requestSequence.current && !isAbortError(caught)) {
           setRequestError(caught instanceof Error ? caught.message : "Could not open this folder.");
         }
+        return false;
       })
       .finally(() => {
-        if (sequence === requestSequence.current) setLoading(false);
+        if (browseRequest.current?.sequence === sequence) browseRequest.current = null;
+        if (sequence === requestSequence.current) setBrowseLoading(false);
       });
+    browseRequest.current = { sequence, promise: operation };
+    void operation;
     return () => controller.abort();
   }, [activeList?.id, filter, kinds, preferences.showHidden, reloadVersion, requestedPath, setPreferences]);
 
   const media = response?.media ?? [];
 
-  const loadMore = useCallback(async () => {
-    if (!requestedPath || !response?.hasMore || loading) return;
+  const loadMore = useCallback((): Promise<LoadMoreResult> => {
+    const sequence = requestSequence.current;
+    const inFlight = loadMoreRequest.current;
+    if (inFlight?.sequence === sequence) return inFlight.promise;
+    if (browseRequest.current?.sequence === sequence) return Promise.resolve({ added: 0, applied: false, hasMore: responseRef.current?.hasMore ?? false });
+    const currentResponse = responseRef.current;
+    if (!requestedPath || !currentResponse?.hasMore) return Promise.resolve({ added: 0, applied: true, hasMore: false });
     loadMoreController.current?.abort();
     const controller = new AbortController();
     loadMoreController.current = controller;
-    const sequence = requestSequence.current;
-    setLoading(true);
-    try {
-      const next = await api<BrowseResponse>(`/api/browse?${query({ path: requestedPath, offset: response.offset + response.limit, limit: response.limit, activeListId: activeList?.id, showHidden: preferences.showHidden, filter, kinds })}`, { signal: controller.signal });
-      if (sequence !== requestSequence.current) return;
-      setResponse((current) => current && current.path === next.path
-        ? applyOptimisticState({ ...next, media: [...current.media, ...next.media] }, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden)
-        : current);
-      reconcileOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden);
-      setRequestError(null);
-    } catch (caught) {
-      if (sequence === requestSequence.current && !isAbortError(caught)) {
-        setRequestError(caught instanceof Error ? caught.message : "Could not load more media.");
+    setLoadingMore(true);
+    const operation = (async (): Promise<LoadMoreResult> => {
+      let cursor = currentResponse;
+      let added = 0;
+      try {
+        while (cursor.hasMore && added === 0) {
+          const next: BrowseResponse = await api<BrowseResponse>(`/api/browse?${query({ path: requestedPath, offset: cursor.offset + cursor.limit, limit: cursor.limit, activeListId: activeList?.id, showHidden: preferences.showHidden, filter, kinds })}`, { signal: controller.signal });
+          if (sequence !== requestSequence.current || next.path !== requestedPath) return { added: 0, applied: false, hasMore: next.hasMore };
+          setResponse((current) => current && current.path === next.path
+            ? applyOptimisticState({ ...next, media: [...current.media, ...next.media] }, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden)
+            : current);
+          reconcileOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden);
+          cursor = next;
+          added += next.media.length;
+        }
+        setRequestError(null);
+        return { added, applied: true, hasMore: cursor.hasMore };
+      } catch (caught) {
+        if (sequence === requestSequence.current && !isAbortError(caught)) {
+          setRequestError(caught instanceof Error ? caught.message : "Could not load more media.");
+        }
+        return { added: 0, applied: false, hasMore: cursor.hasMore };
       }
-    } finally {
-      if (sequence === requestSequence.current) setLoading(false);
+    })();
+    const shared = operation.finally(() => {
+      if (loadMoreRequest.current?.promise === shared) {
+        loadMoreRequest.current = null;
+        setLoadingMore(false);
+      }
+    });
+    loadMoreRequest.current = { sequence, promise: shared };
+    return shared;
+  }, [activeList?.id, filter, kinds, preferences.showHidden, requestedPath]);
+
+  useEffect(() => {
+    const atLoadedEnd = viewerIndex !== null && viewerIndex === media.length - 1 && Boolean(response?.hasMore);
+    if (!atLoadedEnd || !response) {
+      autoPrefetchKey.current = null;
+      return;
     }
-  }, [activeList?.id, filter, kinds, loading, preferences.showHidden, requestedPath, response]);
+    if (browseLoading || browseRequest.current?.sequence === requestSequence.current) return;
+    const key = `${response.path}:${response.offset}:${media.length}`;
+    if (autoPrefetchKey.current === key) return;
+    autoPrefetchKey.current = key;
+    void loadMore();
+  }, [browseLoading, loadMore, media.length, response, viewerIndex]);
+
+  const advanceViewer = useCallback(async () => {
+    if (viewerIndex === null) return;
+    if (viewerIndex < media.length - 1) {
+      setViewerIndex(viewerIndex + 1);
+      return;
+    }
+    if (!response?.hasMore) return;
+    const sourceIndex = viewerIndex;
+    const session = viewerSession.current;
+    setViewerAdvancePending(true);
+    while (browseRequest.current?.sequence === requestSequence.current) {
+      await browseRequest.current.promise;
+      if (viewerSession.current !== session) return;
+    }
+    const result = await loadMore();
+    if (viewerSession.current !== session) return;
+    if (result.applied && result.added > 0) {
+      setViewerIndex((current) => current === sourceIndex ? sourceIndex + 1 : current);
+    }
+    setViewerAdvancePending(false);
+  }, [loadMore, media.length, response?.hasMore, viewerIndex]);
+
+  const openViewer = useCallback((index: number) => {
+    viewerSession.current += 1;
+    setViewerAdvancePending(false);
+    setViewerIndex(index);
+  }, []);
+
+  const closeViewer = useCallback(() => {
+    viewerSession.current += 1;
+    setViewerIndex(null);
+    setViewerAdvancePending(false);
+  }, []);
 
   const classify = useCallback(async (item: MediaEntry, status: ListItemStatus | null) => {
     if (pendingMediaPathsRef.current.has(item.path)) return;
@@ -223,7 +308,7 @@ export function BrowsePage() {
         {error ? <div className="inline-error">{error}</div> : null}
         <div className="gallery-scroll" aria-busy={loading}>
           {response?.folders.length ? <FolderGrid folders={response.folders} pendingPaths={pendingFolderPaths} onOpen={openFolder} onUpdate={updateFolder} /> : null}
-          {media.length ? <VirtualGallery media={media} size={preferences.thumbnailSize} activeList={Boolean(activeList)} pendingPaths={pendingMediaPaths} hasMore={Boolean(response?.hasMore)} loading={loading} onLoadMore={() => void loadMore()} onOpen={setViewerIndex} onStatus={classify} />
+          {media.length ? <VirtualGallery media={media} size={preferences.thumbnailSize} activeList={Boolean(activeList)} pendingPaths={pendingMediaPaths} hasMore={Boolean(response?.hasMore)} loading={loading} onLoadMore={() => void loadMore()} onOpen={openViewer} onStatus={classify} />
             : loading && !response ? <div className="empty-gallery">Opening folder…</div>
               : filter ? <div className="empty-gallery">No filenames match this filter.</div>
                 : response?.folders.length === 0 ? <div className="empty-gallery">{mediaKinds.length === 1 ? `No ${mediaKinds[0] === "image" ? "images" : "videos"} in this folder.` : "No media in this folder."}</div>
@@ -231,7 +316,7 @@ export function BrowsePage() {
         </div>
       </section>
       {preferences.rightSidebarOpen ? <ListSidebar onClose={() => setPreferences({ rightSidebarOpen: false })} /> : null}
-      {viewerIndex !== null ? <Viewer items={media} index={viewerIndex} classificationContext={activeList ? `Active: ${activeList.name}` : null} classificationEnabled={Boolean(activeList)} classificationPending={pendingMediaPaths.has(media[viewerIndex]?.path ?? "")} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)} onStatus={(status) => void classify(media[viewerIndex]!, status)} /> : null}
+      {viewerIndex !== null ? <Viewer items={media} index={viewerIndex} classificationContext={activeList ? `Active: ${activeList.name}` : null} classificationEnabled={Boolean(activeList)} classificationPending={pendingMediaPaths.has(media[viewerIndex]?.path ?? "")} hasNext={viewerIndex < media.length - 1 || Boolean(response?.hasMore)} nextPending={viewerAdvancePending} onIndex={setViewerIndex} onNext={() => void advanceViewer()} onClose={closeViewer} onStatus={(status) => void classify(media[viewerIndex]!, status)} /> : null}
     </div>
   );
 }
@@ -326,6 +411,8 @@ function VirtualGallery({ media, size, activeList, pendingPaths, hasMore, loadin
 }
 
 type FolderPatch = { alias?: string | null; favorite?: boolean; hidden?: boolean };
+
+type LoadMoreResult = { added: number; applied: boolean; hasMore: boolean };
 
 function patchFolder(folder: FolderEntry, patch: FolderPatch): FolderEntry {
   return {

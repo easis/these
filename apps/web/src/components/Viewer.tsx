@@ -9,18 +9,27 @@ interface ViewerProps {
   classificationContext: string | null;
   classificationEnabled: boolean;
   classificationPending?: boolean;
+  hasNext?: boolean;
+  nextPending?: boolean;
   onIndex: (index: number) => void;
+  onNext?: () => void;
   onClose: () => void;
   onStatus: (status: ListItemStatus | null) => void;
 }
 
-export function Viewer({ items, index, classificationContext, classificationEnabled, classificationPending = false, onIndex, onClose, onStatus }: ViewerProps) {
+export function Viewer({ items, index, classificationContext, classificationEnabled, classificationPending = false, hasNext, nextPending = false, onIndex, onNext, onClose, onStatus }: ViewerProps) {
   const media = items[index];
+  const nextAvailable = hasNext ?? index < items.length - 1;
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") onClose();
       else if (event.key === "ArrowLeft") onIndex(Math.max(0, index - 1));
-      else if (event.key === "ArrowRight") onIndex(Math.min(items.length - 1, index + 1));
+      else if (event.key === "ArrowRight") {
+        if (nextAvailable && !nextPending) {
+          if (onNext) onNext();
+          else onIndex(index + 1);
+        }
+      }
       else if (event.key === "1" && classificationEnabled && !classificationPending) onStatus("selected");
       else if (event.key === "2" && classificationEnabled && !classificationPending) onStatus("maybe");
       else if (event.key === "0" && classificationEnabled && !classificationPending) onStatus(null);
@@ -29,11 +38,11 @@ export function Viewer({ items, index, classificationContext, classificationEnab
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [classificationEnabled, classificationPending, index, items.length, onClose, onIndex, onStatus]);
+  }, [classificationEnabled, classificationPending, index, nextAvailable, nextPending, onClose, onIndex, onNext, onStatus]);
 
   if (!media) return null;
   return (
-    <div className="viewer" role="dialog" aria-modal="true" aria-label={media.name} aria-busy={classificationPending}>
+    <div className="viewer" role="dialog" aria-modal="true" aria-label={media.name} aria-busy={classificationPending || nextPending}>
       <div className="viewer-bar">
         <span className="truncate font-mono text-xs text-white/70">{media.name}</span>
         <span className="ml-auto text-xs text-white/55">{classificationContext ?? "Classification unavailable"}</span>
@@ -45,7 +54,7 @@ export function Viewer({ items, index, classificationContext, classificationEnab
           <video key={media.path} src={`/api/media?${query({ path: media.path })}`} controls autoPlay playsInline />
         )}
       </div>
-      <button type="button" className="viewer-nav right" disabled={index === items.length - 1} onClick={() => onIndex(index + 1)} aria-label="Next"><ChevronRight size={28} /></button>
+      <button type="button" className="viewer-nav right" disabled={!nextAvailable || nextPending} onClick={() => onNext ? onNext() : onIndex(index + 1)} aria-label="Next"><ChevronRight size={28} /></button>
       <div className="viewer-classify">
         <button disabled={!classificationEnabled || classificationPending} className={media.status === "selected" ? "is-selected" : ""} type="button" onClick={() => onStatus("selected")}><kbd>1</kbd><Check size={15} /> Selected</button>
         <button disabled={!classificationEnabled || classificationPending} className={media.status === "maybe" ? "is-maybe" : ""} type="button" onClick={() => onStatus("maybe")}><kbd>2</kbd><CircleHelp size={15} /> Maybe</button>
