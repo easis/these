@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ListsPage } from "./ListsPage";
@@ -23,11 +23,27 @@ vi.mock("../state/app-context", () => ({
   }),
 }));
 
-describe("ListsPage downloads", () => {
+describe("ListsPage", () => {
   beforeEach(() => {
     mocks.confirm.mockReset();
     mocks.confirm.mockReturnValue(false);
+    mocks.createList.mockReset();
+    mocks.createList.mockResolvedValue(undefined);
     vi.stubGlobal("confirm", mocks.confirm);
+  });
+
+  it("creates a list from a focused dialog", async () => {
+    render(<MemoryRouter><ListsPage /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole("button", { name: "New list" }));
+    expect(screen.getByRole("dialog", { name: "Create list" })).toBeInTheDocument();
+    const input = screen.getByRole("textbox", { name: "List name" });
+    expect(input).toHaveFocus();
+    fireEvent.change(input, { target: { value: "Archive" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create list" }));
+
+    await waitFor(() => expect(mocks.createList).toHaveBeenCalledWith("Archive"));
+    expect(screen.queryByRole("dialog", { name: "Create list" })).not.toBeInTheDocument();
   });
 
   it("explains the cost and file count before starting a list download", () => {

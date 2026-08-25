@@ -163,7 +163,7 @@ Shortcuts apply to the focused thumbnail or the open viewer.
 | `2` | Mark **Maybe** in the current list |
 | `0` | Remove from the current list |
 | `I` | Show or hide technical details |
-| `Esc` | Close the viewer or cancel alias editing |
+| `Esc` | Close the viewer or cancel an open text dialog |
 
 ## Configuration
 

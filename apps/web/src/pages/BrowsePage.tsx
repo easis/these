@@ -6,6 +6,7 @@ import type { BrowseResponse, FolderEntry, FolderMetadata, ListItemStatus, Media
 import { FolderTree } from "../components/FolderTree";
 import { ListSidebar } from "../components/ListSidebar";
 import { MediaTile } from "../components/MediaTile";
+import { TextInputDialog } from "../components/TextInputDialog";
 import { Viewer } from "../components/Viewer";
 import { api, isAbortError, query } from "../lib/api";
 import { useApp } from "../state/app-context";
@@ -27,6 +28,7 @@ export function BrowsePage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [aliasFolder, setAliasFolder] = useState<FolderEntry | null>(null);
   const [filter, setFilter] = useState("");
   const [mediaKinds, setMediaKinds] = useState<MediaKind[]>(["image", "video"]);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
@@ -54,6 +56,7 @@ export function BrowsePage() {
   const folderSidebarTrigger = useRef<HTMLButtonElement>(null);
   const listSidebarTrigger = useRef<HTMLButtonElement>(null);
   const mobileControlsTrigger = useRef<HTMLButtonElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const pendingPanelFocus = useRef<"folders" | "lists" | "controls" | null>(null);
   const activeFolderView = useRef({ filter, showHidden: preferences.showHidden });
   const kinds = mediaKinds.join(",");
@@ -135,6 +138,7 @@ export function BrowsePage() {
     const getFocusable = () => Array.from(panel.querySelectorAll<HTMLElement>(panelFocusableSelector));
     if (!panel.contains(document.activeElement)) (getFocusable()[0] ?? panel).focus();
     const containPanelFocus = (event: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return;
       if (event.key === "Escape") {
         closeOpenMobilePanel();
         return;
@@ -343,6 +347,7 @@ export function BrowsePage() {
   };
   const updateFolder = async (folder: FolderEntry, patch: FolderPatch) => {
     if (pendingFolderPathsRef.current.has(folder.path)) return false;
+    setMutationError(null);
     const mutationBrowsePath = responseRef.current?.path;
     const previousFolder = findBrowseFolder(responseRef.current, folder.path) ?? folder;
     pendingFolderPathsRef.current.add(folder.path);
@@ -383,6 +388,10 @@ export function BrowsePage() {
     const parentPath = parentFolderPath(folder.path, response.root.path);
     if (parentPath) openFolder(parentPath);
   };
+  const editAlias = (folder: FolderEntry) => {
+    setMutationError(null);
+    setAliasFolder(folder);
+  };
 
   return (
     <div className="browser-layout">
@@ -393,11 +402,11 @@ export function BrowsePage() {
           <Breadcrumbs currentPath={response?.path ?? requestedPath} rootPath={response?.root.path} currentDisplayName={response?.currentFolder.displayName} onOpen={openFolder} />
           <span className="ml-auto" />
           {!preferences.rightSidebarOpen ? <button ref={listSidebarTrigger} className="icon-button browser-navigation-button" type="button" onClick={() => { setMobileControlsOpen(false); setPreferences({ rightSidebarOpen: true, ...(compactViewport ? { leftSidebarOpen: false } : {}) }); }} aria-controls="list-sidebar" aria-expanded="false" aria-label="Show lists sidebar"><PanelRightClose className="rotate-180" size={15} /></button> : null}
-          {response?.currentFolder && !compactViewport ? <span className="desktop-current-folder-actions"><CurrentFolderActions folder={response.currentFolder} canHide={response.path !== response.root.path} pending={pendingFolderPaths.has(response.currentFolder.path)} onUpdate={updateFolder} onToggleHidden={toggleCurrentHidden} /></span> : null}
+          {response?.currentFolder && !compactViewport ? <span className="desktop-current-folder-actions"><CurrentFolderActions folder={response.currentFolder} canHide={response.path !== response.root.path} pending={pendingFolderPaths.has(response.currentFolder.path)} onUpdate={updateFolder} onToggleHidden={toggleCurrentHidden} onEditAlias={editAlias} /></span> : null}
         </div>
         <div className="gallery-subtoolbar">
           {preferences.leftSidebarOpen && !compactViewport ? <button className="icon-button desktop-browser-control" type="button" onClick={() => closeFolderPanel(false)} aria-controls="folder-sidebar" aria-expanded="true" title="Collapse folders" aria-label="Collapse folders"><PanelLeftClose size={15} /></button> : null}
-          <div className="search-control" role="search"><Search size={14} /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search files and folders" aria-label="Search files and folders" />{filter ? <button className="search-clear" type="button" onClick={() => setFilter("")} aria-label="Clear search"><X size={13} /></button> : null}</div>
+          <div className="search-control" role="search"><Search size={14} /><input ref={searchInput} value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search files and folders" aria-label="Search files and folders" />{filter ? <button className="search-clear" type="button" onClick={() => setFilter("")} aria-label="Clear search"><X size={13} /></button> : null}</div>
           {!compactViewport ? <div className="media-kind-filters desktop-browser-control" role="group" aria-label="File types">
             <button type="button" className={mediaKinds.includes("image") ? "is-active" : ""} aria-pressed={mediaKinds.includes("image")} onClick={() => toggleMediaKind("image")}><Image size={13} />Images</button>
             <button type="button" className={mediaKinds.includes("video") ? "is-active" : ""} aria-pressed={mediaKinds.includes("video")} onClick={() => toggleMediaKind("video")}><Video size={13} />Videos</button>
@@ -410,9 +419,9 @@ export function BrowsePage() {
           {preferences.rightSidebarOpen && !compactViewport ? <button className="icon-button desktop-browser-control" type="button" onClick={() => closeListPanel(false)} aria-controls="list-sidebar" aria-expanded="true" title="Collapse lists" aria-label="Collapse lists"><PanelRightClose size={15} /></button> : null}
           {compactViewport ? <button ref={mobileControlsTrigger} className="icon-button mobile-browser-control mobile-more-button" type="button" onClick={() => { setPreferences({ leftSidebarOpen: false, rightSidebarOpen: false }); setMobileControlsOpen(true); }} aria-controls="browser-controls-panel" aria-expanded={mobileControlsOpen} aria-label="Show browser options"><Ellipsis size={20} /></button> : null}
         </div>
-        {error ? <div className="inline-error">{error}</div> : null}
+        {error && !aliasFolder ? <div className="inline-error">{error}</div> : null}
         <div className="gallery-scroll" aria-busy={loading}>
-          {response?.folders.length ? <FolderGrid folders={response.folders} pendingPaths={pendingFolderPaths} onOpen={openFolder} onUpdate={updateFolder} /> : null}
+          {response?.folders.length ? <FolderGrid folders={response.folders} pendingPaths={pendingFolderPaths} onOpen={openFolder} onUpdate={updateFolder} onEditAlias={editAlias} /> : null}
           {media.length ? <VirtualGallery media={media} size={preferences.thumbnailSize} activeList={Boolean(activeList)} pendingPaths={pendingMediaPaths} hasMore={Boolean(response?.hasMore)} loading={loading} onLoadMore={() => void loadMore()} onOpen={openViewer} onStatus={classify} />
             : loading && !response ? <div className="empty-gallery">Opening folder…</div>
               : filter && response?.folders.length === 0 ? <div className="empty-gallery">No files or folders match this search.</div>
@@ -421,8 +430,9 @@ export function BrowsePage() {
         </div>
       </section>
       {preferences.rightSidebarOpen ? <ListSidebar modal={mobilePanel === "lists"} onClose={closeListPanelWithFocus} onSelection={closeListAfterSelection} /> : null}
-      {compactViewport && mobileControlsOpen ? <MobileBrowserControls folder={response?.currentFolder ?? null} canHide={Boolean(response && response.path !== response.root.path)} pending={Boolean(response && pendingFolderPaths.has(response.currentFolder.path))} mediaKinds={mediaKinds} showHidden={preferences.showHidden} thumbnailSize={preferences.thumbnailSize} onClose={() => { pendingPanelFocus.current = "controls"; setMobileControlsOpen(false); }} onToggleKind={toggleMediaKind} onShowHidden={(showHidden) => setPreferences({ showHidden })} onThumbnailSize={(thumbnailSize) => setPreferences({ thumbnailSize })} onUpdateFolder={updateFolder} onToggleHidden={toggleCurrentHidden} /> : null}
+      {compactViewport && mobileControlsOpen ? <MobileBrowserControls folder={response?.currentFolder ?? null} canHide={Boolean(response && response.path !== response.root.path)} pending={Boolean(response && pendingFolderPaths.has(response.currentFolder.path))} mediaKinds={mediaKinds} showHidden={preferences.showHidden} thumbnailSize={preferences.thumbnailSize} onClose={() => { pendingPanelFocus.current = "controls"; setMobileControlsOpen(false); }} onToggleKind={toggleMediaKind} onShowHidden={(showHidden) => setPreferences({ showHidden })} onThumbnailSize={(thumbnailSize) => setPreferences({ thumbnailSize })} onUpdateFolder={updateFolder} onToggleHidden={toggleCurrentHidden} onEditAlias={editAlias} /> : null}
       {mobilePanel ? <button className="panel-backdrop" type="button" tabIndex={-1} onClick={closeOpenMobilePanel} aria-label="Close navigation panel" /> : null}
+      {aliasFolder ? <TextInputDialog title="Edit folder alias" label={`Alias for ${aliasFolder.name}`} initialValue={aliasFolder.displayName === aliasFolder.name ? "" : aliasFolder.displayName} description="Leave this empty to use the folder name." maxLength={160} submitLabel="Save alias" allowEmpty error={mutationError} fallbackFocusRef={searchInput} onValueChange={() => setMutationError(null)} onSubmit={(alias) => updateFolder(aliasFolder, { alias })} onClose={() => { setAliasFolder(null); setMutationError(null); }} /> : null}
       {viewerIndex !== null ? <Viewer items={media} index={viewerIndex} classificationContext={activeList?.name ?? null} classificationEnabled={Boolean(activeList)} classificationPending={pendingMediaPaths.has(media[viewerIndex]?.path ?? "")} hasNext={viewerIndex < media.length - 1 || Boolean(response?.hasMore)} nextPending={viewerAdvancePending} onIndex={setViewerIndex} onNext={() => void advanceViewer()} onClose={closeViewer} onStatus={(status) => void classify(media[viewerIndex]!, status)} /> : null}
     </div>
   );
@@ -437,7 +447,7 @@ function Breadcrumbs({ currentPath, rootPath, currentDisplayName, onOpen }: { cu
   return <nav className="breadcrumbs" aria-label="Folder path">{crumbs.map((crumb, index) => <span key={crumb.path}>{index ? <ChevronRight size={12} /> : null}<button type="button" onClick={() => onOpen(crumb.path)}>{crumb.label}</button></span>)}</nav>;
 }
 
-function MobileBrowserControls({ folder, canHide, pending, mediaKinds, showHidden, thumbnailSize, onClose, onToggleKind, onShowHidden, onThumbnailSize, onUpdateFolder, onToggleHidden }: { folder: FolderEntry | null; canHide: boolean; pending: boolean; mediaKinds: MediaKind[]; showHidden: boolean; thumbnailSize: number; onClose: () => void; onToggleKind: (kind: MediaKind) => void; onShowHidden: (showHidden: boolean) => void; onThumbnailSize: (thumbnailSize: number) => void; onUpdateFolder: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void> }) {
+function MobileBrowserControls({ folder, canHide, pending, mediaKinds, showHidden, thumbnailSize, onClose, onToggleKind, onShowHidden, onThumbnailSize, onUpdateFolder, onToggleHidden, onEditAlias }: { folder: FolderEntry | null; canHide: boolean; pending: boolean; mediaKinds: MediaKind[]; showHidden: boolean; thumbnailSize: number; onClose: () => void; onToggleKind: (kind: MediaKind) => void; onShowHidden: (showHidden: boolean) => void; onThumbnailSize: (thumbnailSize: number) => void; onUpdateFolder: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void>; onEditAlias: (folder: FolderEntry) => void }) {
   return (
     <aside id="browser-controls-panel" className="browser-controls-panel" role="dialog" aria-modal="true" aria-label="Browser options" tabIndex={-1}>
       <div className="browser-controls-heading"><span>Browser options</span><button className="icon-button" type="button" onClick={onClose} aria-label="Close browser options"><X size={19} /></button></div>
@@ -451,42 +461,29 @@ function MobileBrowserControls({ folder, canHide, pending, mediaKinds, showHidde
           <button className={`mobile-option-row ${showHidden ? "is-active" : ""}`} type="button" aria-pressed={showHidden} onClick={() => onShowHidden(!showHidden)}>{showHidden ? <Eye size={18} /> : <EyeOff size={18} />}<span><strong>Hidden folders</strong><small>{showHidden ? "Shown in navigation" : "Hidden from navigation"}</small></span></button>
           <label className="mobile-size-control"><span><SlidersHorizontal size={18} /><strong>Thumbnail size</strong></span><input type="range" min="120" max="280" step="20" value={thumbnailSize} onChange={(event) => onThumbnailSize(Number(event.target.value))} aria-label="Thumbnail size" /><output>{thumbnailSize}px</output></label>
         </section>
-        {folder ? <section className="browser-controls-section"><h2>Current folder</h2><p className="browser-current-folder-name" title={folder.path}>{folder.displayName}</p><CurrentFolderActions expanded folder={folder} canHide={canHide} pending={pending} onUpdate={onUpdateFolder} onToggleHidden={onToggleHidden} /></section> : null}
+        {folder ? <section className="browser-controls-section"><h2>Current folder</h2><p className="browser-current-folder-name" title={folder.path}>{folder.displayName}</p><CurrentFolderActions expanded folder={folder} canHide={canHide} pending={pending} onUpdate={onUpdateFolder} onToggleHidden={onToggleHidden} onEditAlias={onEditAlias} /></section> : null}
       </div>
     </aside>
   );
 }
 
-function CurrentFolderActions({ folder, canHide, pending, expanded = false, onUpdate, onToggleHidden }: { folder: FolderEntry; canHide: boolean; pending: boolean; expanded?: boolean; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void> }) {
-  const [editing, setEditing] = useState(false);
-  const [alias, setAlias] = useState("");
-  if (editing) {
-    return (
-      <form className={`current-folder-alias-form ${expanded ? "is-expanded" : ""}`} aria-busy={pending} onSubmit={(event) => { event.preventDefault(); void onUpdate(folder, { alias }).then((saved) => saved && setEditing(false)); }}>
-        <input autoFocus value={alias} maxLength={160} disabled={pending} onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => event.key === "Escape" && !pending && setEditing(false)} aria-label={`Alias for ${folder.name}`} />
-        <button type="submit" disabled={pending}>Save</button>
-        {expanded ? <button className="secondary" type="button" disabled={pending} onClick={() => setEditing(false)}>Cancel</button> : null}
-      </form>
-    );
-  }
+function CurrentFolderActions({ folder, canHide, pending, expanded = false, onUpdate, onToggleHidden, onEditAlias }: { folder: FolderEntry; canHide: boolean; pending: boolean; expanded?: boolean; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void>; onEditAlias: (folder: FolderEntry) => void }) {
   return (
     <div className={`current-folder-actions ${expanded ? "is-expanded" : ""}`} role="group" aria-label="Current folder actions" aria-busy={pending}>
       <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"} aria-label={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"}><Star size={expanded ? 17 : 13} fill={folder.favorite ? "currentColor" : "none"} />{expanded ? <span>{folder.favorite ? "Favorited" : "Favorite"}</span> : null}</button>
-      <button type="button" disabled={pending} onClick={() => { setAlias(folder.displayName === folder.name ? "" : folder.displayName); setEditing(true); }} title="Edit current folder alias" aria-label="Edit current folder alias"><Pencil size={expanded ? 17 : 13} />{expanded ? <span>Edit alias</span> : null}</button>
+      <button type="button" disabled={pending} onClick={() => onEditAlias(folder)} title="Edit current folder alias" aria-label="Edit current folder alias"><Pencil size={expanded ? 17 : 13} />{expanded ? <span>Edit alias</span> : null}</button>
       <button type="button" className={folder.hidden ? "is-hidden" : ""} disabled={pending || (!canHide && !folder.hidden)} aria-pressed={folder.hidden} onClick={() => void onToggleHidden(folder)} title={!canHide && !folder.hidden ? "The media root cannot be hidden here" : folder.hidden ? "Unhide current folder" : "Hide current folder"} aria-label={folder.hidden ? "Unhide current folder" : "Hide current folder"}>{folder.hidden ? <Eye size={expanded ? 17 : 13} /> : <EyeOff size={expanded ? 17 : 13} />}{expanded ? <span>{folder.hidden ? "Unhide" : "Hide"}</span> : null}</button>
     </div>
   );
 }
 
-function FolderGrid({ folders, pendingPaths, onOpen, onUpdate }: { folders: FolderEntry[]; pendingPaths: Set<string>; onOpen: (path: string) => void; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean> }) {
-  const [editing, setEditing] = useState<string | null>(null);
-  const [alias, setAlias] = useState("");
+function FolderGrid({ folders, pendingPaths, onOpen, onUpdate, onEditAlias }: { folders: FolderEntry[]; pendingPaths: Set<string>; onOpen: (path: string) => void; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onEditAlias: (folder: FolderEntry) => void }) {
   return (
     <section className="folder-grid" aria-label="Folders in this directory">
       {folders.map((folder) => {
         const pending = pendingPaths.has(folder.path);
         return (
-          <div className={`folder-item ${folder.hidden ? "is-hidden" : ""} ${editing === folder.path ? "is-editing" : ""}`} key={folder.path} aria-busy={pending}>
+          <div className={`folder-item ${folder.hidden ? "is-hidden" : ""}`} key={folder.path} aria-busy={pending}>
             <button type="button" className="folder-open" onClick={() => onOpen(folder.path)} title={folder.path} aria-label={folder.displayName}>
               <Folder size={17} fill="currentColor" fillOpacity={0.08} />
               <span className="truncate">{folder.displayName}</span>
@@ -495,13 +492,11 @@ function FolderGrid({ folders, pendingPaths, onOpen, onUpdate }: { folders: Fold
                 {folder.hidden ? <EyeOff className="is-hidden" size={13} /> : null}
               </span> : null}
             </button>
-            {editing === folder.path ? <form className="folder-alias-form" onSubmit={(event) => { event.preventDefault(); void onUpdate(folder, { alias }).then((saved) => saved && setEditing(null)); }}><input autoFocus value={alias} maxLength={160} disabled={pending} onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => event.key === "Escape" && !pending && setEditing(null)} aria-label={`Alias for ${folder.name}`} /><button type="submit" disabled={pending}>Save</button></form> : (
-              <span className="folder-actions">
-                <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
-                <button type="button" disabled={pending} onClick={() => { setEditing(folder.path); setAlias(folder.displayName === folder.name ? "" : folder.displayName); }} title="Edit alias" aria-label="Edit alias"><Pencil size={14} /></button>
-                <button type="button" disabled={pending} className={folder.hidden ? "is-hidden" : ""} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-              </span>
-            )}
+            <span className="folder-actions">
+              <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
+              <button type="button" disabled={pending} onClick={() => onEditAlias(folder)} title="Edit alias" aria-label="Edit alias"><Pencil size={14} /></button>
+              <button type="button" disabled={pending} className={folder.hidden ? "is-hidden" : ""} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+            </span>
           </div>
         );
       })}

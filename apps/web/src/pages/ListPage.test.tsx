@@ -61,7 +61,7 @@ describe("ListPage viewer", () => {
     })));
   });
 
-  it("offers counted download variants and renames the list inline", async () => {
+  it("offers counted download variants and renames the list in a dialog", async () => {
     render(
       <MemoryRouter initialEntries={["/lists/7"]}>
         <Routes><Route path="/lists/:id" element={<ListPage />} /></Routes>
@@ -77,8 +77,9 @@ describe("ListPage viewer", () => {
     expect(within(menu).getByRole("menuitem", { name: "Download All (Selected + Maybe) (2)" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit list name" }));
+    expect(screen.getByRole("dialog", { name: "Rename list" })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "List name" }), { target: { value: "Final delivery" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/lists/7", {
       method: "PATCH",
       body: JSON.stringify({ name: "Final delivery" }),
