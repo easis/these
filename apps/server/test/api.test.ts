@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rename, rm, unlink, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import type { BootstrapResponse, BrowseResponse, FolderMetadata, ListItem, TheseList } from "@these/shared";
+import type { BootstrapResponse, BrowseResponse, FolderMetadata, ListItem, MediaMetadataResponse, TheseList } from "@these/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig, parseMediaRoots } from "../src/config.js";
 
@@ -246,6 +246,28 @@ describe("These API", () => {
       expect(invalid.statusCode).toBe(416);
       expect(invalid.headers["content-range"]).toBe("bytes */10");
     }
+  });
+
+  it("serves lazy media metadata without exposing absolute paths", async () => {
+    const album = path.join(root, "album");
+    const mediaPath = path.join(album, "photo.jpg");
+    await mkdir(album);
+    await writeFile(mediaPath, "not a decodable image");
+
+    const response = await app!.inject({ method: "GET", url: `/api/media-metadata?path=${encodeURIComponent(mediaPath)}` });
+    const payload = response.json<MediaMetadataResponse>();
+    expect(response.statusCode).toBe(200);
+    expect(payload).toMatchObject({
+      kind: "image",
+      file: { name: "photo.jpg", rootLabel: "Library", relativePath: "album/photo.jpg", size: 21 },
+    });
+    expect(payload.warnings).toContain("Could not read the image properties.");
+    expect(response.body).not.toContain(root);
+
+    const outside = await app!.inject({ method: "GET", url: `/api/media-metadata?path=${encodeURIComponent("/outside/photo.jpg")}` });
+    expect(outside.statusCode).toBe(403);
+    const missing = await app!.inject({ method: "GET", url: `/api/media-metadata?path=${encodeURIComponent(path.join(root, "missing.jpg"))}` });
+    expect(missing.statusCode).toBe(404);
   });
 
   it("streams ZIP downloads with predictable collision names", async () => {

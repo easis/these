@@ -7,6 +7,7 @@ import type { BrowseResponse, FolderMetadata, ListItemStatus, MediaEntry, MediaK
 import { AppError } from "../lib/errors.js";
 import { mediaKindForPath, mimeTypeForPath } from "../lib/media.js";
 import { MediaAccess } from "../services/media-access.js";
+import { MediaMetadataService } from "../services/media-metadata.js";
 import { MediaRootService } from "../services/media-roots.js";
 import { Repository } from "../services/repository.js";
 import { ThumbnailService } from "../services/thumbnails.js";
@@ -15,13 +16,14 @@ import { parseByteRange } from "../services/byte-range.js";
 
 interface ApiDependencies {
   mediaAccess: MediaAccess;
+  mediaMetadata: MediaMetadataService;
   mediaRoots: MediaRootService;
   repository: Repository;
   thumbnails: ThumbnailService;
 }
 
 export async function registerApi(app: FastifyInstance, dependencies: ApiDependencies) {
-  const { mediaAccess, mediaRoots, repository, thumbnails } = dependencies;
+  const { mediaAccess, mediaMetadata, mediaRoots, repository, thumbnails } = dependencies;
 
   app.get("/api/health", async () => ({ ok: true }));
 
@@ -145,6 +147,28 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
       .header("Content-Range", `bytes ${range.start}-${range.end}/${fileStats.size}`)
       .header("Content-Length", String(range.end - range.start + 1))
       .send(createReadStream(resolved.canonicalPath!, { start: range.start, end: range.end }));
+  });
+
+  app.get<{ Querystring: { path: string } }>("/api/media-metadata", async (request, reply) => {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    request.raw.once("aborted", abort);
+    reply.raw.once("close", abort);
+    try {
+      const kind = requireMediaKind(request.query.path);
+      const resolved = await mediaAccess.resolveExisting(request.query.path, "file");
+      return await mediaMetadata.inspect({
+        canonicalPath: resolved.canonicalPath!,
+        requestedPath: resolved.requestedPath,
+        rootPath: resolved.root.path,
+        rootLabel: resolved.root.label,
+        kind,
+        signal: controller.signal,
+      });
+    } finally {
+      request.raw.removeListener("aborted", abort);
+      reply.raw.removeListener("close", abort);
+    }
   });
 
   app.get("/api/lists", async () => repository.getLists());

@@ -7,6 +7,7 @@ import { createDatabase } from "./db/index.js";
 import { AppError } from "./lib/errors.js";
 import { registerApi } from "./routes/api.js";
 import { MediaAccess } from "./services/media-access.js";
+import { MediaMetadataService } from "./services/media-metadata.js";
 import { MediaRootService } from "./services/media-roots.js";
 import { Repository } from "./services/repository.js";
 import { ThumbnailService } from "./services/thumbnails.js";
@@ -17,6 +18,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const repository = new Repository(database.db);
   const mediaRoots = await MediaRootService.create(repository, config.roots);
   const mediaAccess = new MediaAccess(() => mediaRoots.getConfiguredRoots());
+  const mediaMetadata = new MediaMetadataService();
   const thumbnails = new ThumbnailService(path.join(config.dataDir, "cache"));
 
   app.addHook("onClose", async () => database.sqlite.close());
@@ -29,7 +31,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     return reply.code(500).send({ error: "The server could not complete the request.", code: "INTERNAL_ERROR" });
   });
 
-  await registerApi(app, { mediaAccess, mediaRoots, repository, thumbnails });
+  await registerApi(app, { mediaAccess, mediaMetadata, mediaRoots, repository, thumbnails });
 
   if (existsSync(path.join(config.webDistDir, "index.html"))) {
     await app.register(fastifyStatic, { root: config.webDistDir, wildcard: false });

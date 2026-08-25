@@ -88,6 +88,7 @@ Shortcuts apply to a focused thumbnail or the open viewer.
 | `1` | Mark Selected in the current list context |
 | `2` | Mark Maybe in the current list context |
 | `0` | Remove from the current list context |
+| `I` | Show or hide technical details for the open media |
 | `Esc` | Close the viewer or cancel inline alias editing |
 
 ## Configuration
@@ -169,7 +170,6 @@ The runtime image contains Node.js, the Fastify server, the compiled React appli
 - Folder moves are repaired manually rather than detected automatically.
 - Directory symlinks are not shown in the tree. Direct symlink paths are validated and cannot escape a root.
 - The list review screen loads up to 1,000 items in this version. Downloads allow a larger bounded set and stream their contents.
-- Video duration and additional EXIF metadata are not displayed yet.
 - Mobile is usable for basic access but the primary layout is desktop and tablet oriented.
 
 ## License
