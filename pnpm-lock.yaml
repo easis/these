@@ -123,6 +123,9 @@ importers:
       vitest:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.50.0)(tsx@4.23.12)
+      workbox-window:
+        specifier: ^7.4.1
+        version: 7.4.1
 
   packages/shared:
     devDependencies:

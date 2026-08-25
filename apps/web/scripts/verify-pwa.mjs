@@ -7,6 +7,9 @@ const dist = path.join(packageRoot, "dist");
 const manifest = JSON.parse(await readFile(path.join(dist, "manifest.webmanifest"), "utf8"));
 const html = await readFile(path.join(dist, "index.html"), "utf8");
 const serviceWorker = await readFile(path.join(dist, "sw.js"), "utf8");
+const entryScriptPath = html.match(/<script[^>]+type=["']module["'][^>]+src=["']\/([^"']+)["']/i)?.[1];
+assert(Boolean(entryScriptPath), "index.html must load the application entry script");
+const entryScript = await readFile(path.join(dist, entryScriptPath), "utf8");
 
 assert(manifest.name === "these", "manifest name must be these");
 assert(manifest.display === "standalone", "manifest display must be standalone");
@@ -40,6 +43,10 @@ assert((serviceWorker.match(/\.registerRoute\(/g) ?? []).length === 1, "service 
 assert(/denylist:\[\/\^\\\/api/.test(serviceWorker), "navigation fallback must exclude /api");
 assert(serviceWorker.includes(".skipWaiting()"), "service worker updates must activate without waiting for existing clients to close");
 assert(serviceWorker.includes(".clientsClaim()"), "updated service workers must claim existing clients");
+assert(!html.includes("registerSW.js"), "service worker registration must be managed by the application update lifecycle");
+assert(entryScript.includes('"/sw.js"'), "application entry must register the service worker");
+assert(/immediate:(?:!0|true)/.test(entryScript), "application entry must check for service worker updates immediately");
+assert(entryScript.includes("window.location.reload()"), "application entry must reload after an updated service worker activates");
 
 console.log("PWA artifacts verified.");
 
