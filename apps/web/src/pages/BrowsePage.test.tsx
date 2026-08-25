@@ -96,6 +96,80 @@ describe("BrowsePage requests", () => {
     expect(compactViewport.removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
   });
 
+  it("offers backdrop and Escape dismissal for a compact navigation panel", () => {
+    const compactViewport = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("matchMedia", vi.fn(() => compactViewport));
+    mocks.preferences.leftSidebarOpen = true;
+    mocks.api.mockResolvedValue(browseResponse("/media", 0));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    const drawer = screen.getByRole("dialog", { name: "Folders" });
+    const close = screen.getByRole("button", { name: "Close folders" });
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+    expect(document.querySelector(".gallery-panel")).toHaveAttribute("inert");
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(screen.getByTitle("/media")).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(close).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close navigation panel" }));
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ leftSidebarOpen: false, rightSidebarOpen: false });
+
+    mocks.setPreferences.mockClear();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ leftSidebarOpen: false, rightSidebarOpen: false });
+  });
+
+  it("closes the folder drawer after compact navigation but keeps it open on desktop", () => {
+    const compactViewport = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("matchMedia", vi.fn(() => compactViewport));
+    mocks.preferences.leftSidebarOpen = true;
+    mocks.api.mockResolvedValue(browseResponse("/media", 0));
+
+    const { unmount } = render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(screen.getByTitle("/media"));
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ leftSidebarOpen: false });
+
+    unmount();
+    mocks.setPreferences.mockClear();
+    compactViewport.matches = false;
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(screen.getByTitle("/media"));
+    expect(mocks.setPreferences).not.toHaveBeenCalledWith({ leftSidebarOpen: false });
+  });
+
+  it("keeps dynamically rendered list controls inside the compact focus loop", () => {
+    const compactViewport = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("matchMedia", vi.fn(() => compactViewport));
+    mocks.preferences.rightSidebarOpen = true;
+    mocks.api.mockResolvedValue(browseResponse("/media", 0));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "New list" }));
+    const close = screen.getByRole("button", { name: "Close lists" });
+    const cancel = screen.getByRole("button", { name: "Cancel new list" });
+
+    cancel.focus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(cancel).toHaveFocus();
+  });
+
   it("does not let a slow response from the previous folder replace the current one", async () => {
     const pending = new Map<string, (response: BrowseResponse) => void>();
     mocks.api.mockImplementation((url: string) => new Promise<BrowseResponse>((resolve) => {

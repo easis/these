@@ -31,12 +31,14 @@ describe("ListSidebar", () => {
   });
 
   it("activates from the whole row and keeps management as a separate link", async () => {
-    render(<MemoryRouter><ListSidebar /></MemoryRouter>);
+    const onSelection = vi.fn();
+    render(<MemoryRouter><ListSidebar onSelection={onSelection} /></MemoryRouter>);
 
     const activate = screen.getByRole("button", { name: "Make Review active" });
     expect(activate).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(activate);
     expect(mocks.setActiveList).toHaveBeenCalledWith(8);
+    await waitFor(() => expect(onSelection).toHaveBeenCalledOnce());
     await waitFor(() => expect(activate).not.toBeDisabled());
 
     expect(screen.getByRole("link", { name: "Manage Review" })).toHaveAttribute("href", "/lists/8");
@@ -44,12 +46,14 @@ describe("ListSidebar", () => {
     expect(deactivate).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(deactivate);
     expect(mocks.setActiveList).toHaveBeenCalledWith(null);
+    await waitFor(() => expect(onSelection).toHaveBeenCalledTimes(2));
   });
 
   it("blocks activation while pending and reports failures", async () => {
     const activation = deferred<void>();
+    const onSelection = vi.fn();
     mocks.setActiveList.mockReturnValueOnce(activation.promise);
-    render(<MemoryRouter><ListSidebar /></MemoryRouter>);
+    render(<MemoryRouter><ListSidebar onSelection={onSelection} /></MemoryRouter>);
 
     fireEvent.click(screen.getByRole("button", { name: "Make Review active" }));
     expect(screen.getByRole("complementary", { name: "Lists" })).toHaveAttribute("aria-busy", "true");
@@ -58,6 +62,7 @@ describe("ListSidebar", () => {
     activation.reject(new Error("Could not save the active list."));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save the active list.");
     expect(screen.getByRole("button", { name: "Deactivate Keepers" })).not.toBeDisabled();
+    expect(onSelection).not.toHaveBeenCalled();
   });
 
   it("provides mouse controls for creating and cancelling a list", async () => {

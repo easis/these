@@ -10,6 +10,13 @@ import { Viewer } from "../components/Viewer";
 import { api, isAbortError, query } from "../lib/api";
 import { useApp } from "../state/app-context";
 
+const compactViewportQuery = "(max-width: 720px)";
+const panelFocusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function isCompactViewport() {
+  return typeof matchMedia === "function" && matchMedia(compactViewportQuery).matches;
+}
+
 export function BrowsePage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -28,6 +35,7 @@ export function BrowsePage() {
   const [pendingFolderPaths, setPendingFolderPaths] = useState<Set<string>>(() => new Set());
   const [pendingMediaPaths, setPendingMediaPaths] = useState<Set<string>>(() => new Set());
   const [folderHiddenOverrides, setFolderHiddenOverrides] = useState<Map<string, boolean>>(() => new Map());
+  const [compactViewport, setCompactViewport] = useState(isCompactViewport);
   const requestSequence = useRef(0);
   const browseRequest = useRef<{ sequence: number; promise: Promise<boolean> } | null>(null);
   const loadMoreController = useRef<AbortController | null>(null);
@@ -42,22 +50,91 @@ export function BrowsePage() {
   const pendingMediaPathsRef = useRef(new Set<string>());
   const optimisticFolderPatches = useRef(new Map<string, FolderPatch>());
   const optimisticMediaStatuses = useRef(new Map<string, ListItemStatus | null>());
+  const folderSidebarTrigger = useRef<HTMLButtonElement>(null);
+  const listSidebarTrigger = useRef<HTMLButtonElement>(null);
+  const pendingPanelFocus = useRef<"folders" | "lists" | null>(null);
   const kinds = mediaKinds.join(",");
   const loading = browseLoading || loadingMore;
   const error = mutationError ?? requestError;
   currentActiveListId.current = activeList?.id ?? null;
   responseRef.current = response;
 
+  const closeFolderPanel = useCallback((restoreFocus: boolean) => {
+    pendingPanelFocus.current = restoreFocus ? "folders" : null;
+    setPreferences({ leftSidebarOpen: false });
+  }, [setPreferences]);
+
+  const closeListPanel = useCallback((restoreFocus: boolean) => {
+    pendingPanelFocus.current = restoreFocus ? "lists" : null;
+    setPreferences({ rightSidebarOpen: false });
+  }, [setPreferences]);
+
+  const closeOpenMobilePanel = useCallback(() => {
+    if (!compactViewport) return;
+    pendingPanelFocus.current = preferences.leftSidebarOpen ? "folders" : preferences.rightSidebarOpen ? "lists" : null;
+    setPreferences({ leftSidebarOpen: false, rightSidebarOpen: false });
+  }, [compactViewport, preferences.leftSidebarOpen, preferences.rightSidebarOpen, setPreferences]);
+
+  const closeFolderPanelWithFocus = useCallback(() => closeFolderPanel(compactViewport), [closeFolderPanel, compactViewport]);
+  const closeListPanelWithFocus = useCallback(() => closeListPanel(compactViewport), [closeListPanel, compactViewport]);
+  const closeFolderAfterNavigation = useCallback(() => {
+    if (compactViewport) closeFolderPanel(false);
+  }, [closeFolderPanel, compactViewport]);
+  const closeListAfterSelection = useCallback(() => {
+    if (compactViewport) closeListPanel(false);
+  }, [closeListPanel, compactViewport]);
+
   useEffect(() => {
-    if (!preferences.leftSidebarOpen || !preferences.rightSidebarOpen) return;
-    const compactViewport = matchMedia("(max-width: 720px)");
-    const closeOverlappingSidebar = () => {
-      if (compactViewport.matches) setPreferences({ rightSidebarOpen: false });
+    if (typeof matchMedia !== "function") return;
+    const media = matchMedia(compactViewportQuery);
+    const update = () => setCompactViewport(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (compactViewport && preferences.leftSidebarOpen && preferences.rightSidebarOpen) setPreferences({ rightSidebarOpen: false });
+  }, [compactViewport, preferences.leftSidebarOpen, preferences.rightSidebarOpen, setPreferences]);
+
+  useEffect(() => {
+    if (pendingPanelFocus.current === "folders" && !preferences.leftSidebarOpen) {
+      folderSidebarTrigger.current?.focus();
+      pendingPanelFocus.current = null;
+    } else if (pendingPanelFocus.current === "lists" && !preferences.rightSidebarOpen) {
+      listSidebarTrigger.current?.focus();
+      pendingPanelFocus.current = null;
+    }
+  }, [preferences.leftSidebarOpen, preferences.rightSidebarOpen]);
+
+  const mobilePanelOpen = compactViewport && viewerIndex === null && (preferences.leftSidebarOpen || preferences.rightSidebarOpen);
+  useEffect(() => {
+    if (!mobilePanelOpen) return;
+    const panel = document.getElementById(preferences.leftSidebarOpen ? "folder-sidebar" : "list-sidebar");
+    if (!panel) return;
+    const getFocusable = () => Array.from(panel.querySelectorAll<HTMLElement>(panelFocusableSelector));
+    if (!panel.contains(document.activeElement)) (getFocusable()[0] ?? panel).focus();
+    const containPanelFocus = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeOpenMobilePanel();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = getFocusable();
+      const first = focusable[0] ?? panel;
+      const last = focusable.at(-1) ?? panel;
+      const focusOutsidePanel = !panel.contains(document.activeElement);
+      if (event.shiftKey && (document.activeElement === first || focusOutsidePanel)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || focusOutsidePanel)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-    closeOverlappingSidebar();
-    compactViewport.addEventListener("change", closeOverlappingSidebar);
-    return () => compactViewport.removeEventListener("change", closeOverlappingSidebar);
-  }, [preferences.leftSidebarOpen, preferences.rightSidebarOpen, setPreferences]);
+    window.addEventListener("keydown", containPanelFocus);
+    return () => window.removeEventListener("keydown", containPanelFocus);
+  }, [closeOpenMobilePanel, mobilePanelOpen, preferences.leftSidebarOpen]);
 
   useEffect(() => {
     const sequence = ++requestSequence.current;
@@ -282,17 +359,17 @@ export function BrowsePage() {
 
   return (
     <div className="browser-layout">
-      {preferences.leftSidebarOpen ? <FolderTree currentPath={response?.path ?? requestedPath} hiddenOverrides={folderHiddenOverrides} onClose={() => setPreferences({ leftSidebarOpen: false })} /> : null}
-      <section className="gallery-panel">
+      {preferences.leftSidebarOpen ? <FolderTree currentPath={response?.path ?? requestedPath} hiddenOverrides={folderHiddenOverrides} modal={mobilePanelOpen} onClose={closeFolderPanelWithFocus} onNavigate={closeFolderAfterNavigation} /> : null}
+      <section className="gallery-panel" inert={mobilePanelOpen}>
         <div className="gallery-toolbar">
-          {!preferences.leftSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ leftSidebarOpen: true, ...(matchMedia("(max-width: 720px)").matches ? { rightSidebarOpen: false } : {}) })} aria-label="Show folder sidebar"><PanelLeftClose className="rotate-180" size={15} /></button> : null}
+          {!preferences.leftSidebarOpen ? <button ref={folderSidebarTrigger} className="icon-button" type="button" onClick={() => setPreferences({ leftSidebarOpen: true, ...(compactViewport ? { rightSidebarOpen: false } : {}) })} aria-controls="folder-sidebar" aria-expanded="false" aria-label="Show folder sidebar"><PanelLeftClose className="rotate-180" size={15} /></button> : null}
           <Breadcrumbs currentPath={response?.path ?? requestedPath} rootPath={response?.root.path} currentDisplayName={response?.currentFolder.displayName} onOpen={openFolder} />
           <span className="ml-auto" />
-          {!preferences.rightSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ rightSidebarOpen: true, ...(matchMedia("(max-width: 720px)").matches ? { leftSidebarOpen: false } : {}) })} aria-label="Show lists sidebar"><PanelRightClose className="rotate-180" size={15} /></button> : null}
+          {!preferences.rightSidebarOpen ? <button ref={listSidebarTrigger} className="icon-button" type="button" onClick={() => setPreferences({ rightSidebarOpen: true, ...(compactViewport ? { leftSidebarOpen: false } : {}) })} aria-controls="list-sidebar" aria-expanded="false" aria-label="Show lists sidebar"><PanelRightClose className="rotate-180" size={15} /></button> : null}
           {response?.currentFolder ? <CurrentFolderActions folder={response.currentFolder} canHide={response.path !== response.root.path} pending={pendingFolderPaths.has(response.currentFolder.path)} onUpdate={updateFolder} onToggleHidden={toggleCurrentHidden} /> : null}
         </div>
         <div className="gallery-subtoolbar">
-          {preferences.leftSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ leftSidebarOpen: false })} title="Collapse folders" aria-label="Collapse folders"><PanelLeftClose size={15} /></button> : null}
+          {preferences.leftSidebarOpen ? <button className="icon-button" type="button" onClick={() => closeFolderPanel(false)} aria-controls="folder-sidebar" aria-expanded="true" title="Collapse folders" aria-label="Collapse folders"><PanelLeftClose size={15} /></button> : null}
           <label className="search-control"><Search size={14} /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter filenames" aria-label="Filter filenames" /></label>
           <div className="media-kind-filters" role="group" aria-label="File types">
             <button type="button" className={mediaKinds.includes("image") ? "is-active" : ""} aria-pressed={mediaKinds.includes("image")} onClick={() => toggleMediaKind("image")}><Image size={13} />Images</button>
@@ -303,7 +380,7 @@ export function BrowsePage() {
           </button>
           <span className="ml-auto text-xs tabular-nums text-muted">{response ? `${response.totalMedia} media · ${response.folders.length} folders` : ""}</span>
           <label className="size-control" title="Thumbnail size"><SlidersHorizontal size={14} /><input type="range" min="120" max="280" step="20" value={preferences.thumbnailSize} onChange={(event) => setPreferences({ thumbnailSize: Number(event.target.value) })} aria-label="Thumbnail size" /></label>
-          {preferences.rightSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ rightSidebarOpen: false })} title="Collapse lists" aria-label="Collapse lists"><PanelRightClose size={15} /></button> : null}
+          {preferences.rightSidebarOpen ? <button className="icon-button" type="button" onClick={() => closeListPanel(false)} aria-controls="list-sidebar" aria-expanded="true" title="Collapse lists" aria-label="Collapse lists"><PanelRightClose size={15} /></button> : null}
         </div>
         {error ? <div className="inline-error">{error}</div> : null}
         <div className="gallery-scroll" aria-busy={loading}>
@@ -315,7 +392,8 @@ export function BrowsePage() {
                   : null}
         </div>
       </section>
-      {preferences.rightSidebarOpen ? <ListSidebar onClose={() => setPreferences({ rightSidebarOpen: false })} /> : null}
+      {preferences.rightSidebarOpen ? <ListSidebar modal={mobilePanelOpen} onClose={closeListPanelWithFocus} onSelection={closeListAfterSelection} /> : null}
+      {mobilePanelOpen ? <button className="panel-backdrop" type="button" tabIndex={-1} onClick={closeOpenMobilePanel} aria-label="Close navigation panel" /> : null}
       {viewerIndex !== null ? <Viewer items={media} index={viewerIndex} classificationContext={activeList?.name ?? null} classificationEnabled={Boolean(activeList)} classificationPending={pendingMediaPaths.has(media[viewerIndex]?.path ?? "")} hasNext={viewerIndex < media.length - 1 || Boolean(response?.hasMore)} nextPending={viewerAdvancePending} onIndex={setViewerIndex} onNext={() => void advanceViewer()} onClose={closeViewer} onStatus={(status) => void classify(media[viewerIndex]!, status)} /> : null}
     </div>
   );

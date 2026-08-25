@@ -67,13 +67,16 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
 
 const emptyHiddenOverrides = new Map<string, boolean>();
 
-export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides, onClose }: { currentPath: string | null; hiddenOverrides?: ReadonlyMap<string, boolean>; onClose?: () => void }) {
+export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides, onClose, onNavigate, modal = false }: { currentPath: string | null; hiddenOverrides?: ReadonlyMap<string, boolean>; onClose?: () => void; onNavigate?: () => void; modal?: boolean }) {
   const { bootstrap, preferences } = useApp();
   const navigate = useNavigate();
-  const open = useCallback((folderPath: string) => navigate(`/browse?${query({ path: folderPath })}`), [navigate]);
+  const open = useCallback((folderPath: string) => {
+    navigate(`/browse?${query({ path: folderPath })}`);
+    onNavigate?.();
+  }, [navigate, onNavigate]);
   const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides))) ?? [];
   return (
-    <aside className="side-panel left-panel" aria-label="Folders">
+    <aside id="folder-sidebar" className="side-panel left-panel" role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined}>
       <div className="panel-heading"><span>Folders</span>{onClose ? <button className="icon-button panel-close" type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
       {visibleFavorites.length ? (
         <section className="border-b border-default pb-2">
