@@ -105,6 +105,16 @@ docker compose pull
 docker compose up -d
 ```
 
+### Install as an app
+
+*these* includes a web app manifest and service worker, so supported browsers can install it from their native install menu. The installed app opens in its own standalone window.
+
+The service worker caches only the application shell: HTML, JavaScript, CSS, and icons. API responses, thumbnails, original media, and list changes still require a connection to the *these* server and are not stored for offline use. If the server is unavailable, the cached shell shows a retryable connection screen and refreshes automatically when the browser comes back online.
+
+Service workers require a secure browser context. Plain HTTP works on `localhost` for development, but access from another computer or phone should use HTTPS through a reverse proxy such as Caddy, Traefik, or nginx. The *these* container continues to serve HTTP internally; TLS termination and certificates stay with the proxy.
+
+When a new frontend version is deployed, it is downloaded in the background and becomes active after all open *these* tabs or installed windows have been closed and reopened. An active session is never force-reloaded.
+
 Here `/volume1/photos` is the real host directory and `/media/photos` is its stable path inside the container. Add `/media/photos` in *these* after the service starts. The display label can be anything you like.
 
 > [!TIP]
