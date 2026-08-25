@@ -38,6 +38,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    const retryWhenOnline = () => { void refresh(); };
+    window.addEventListener("online", retryWhenOnline);
+    return () => window.removeEventListener("online", retryWhenOnline);
+  }, [refresh]);
+  useEffect(() => {
     applyTheme(preferences.theme);
     const media = matchMedia("(prefers-color-scheme: dark)");
     const update = () => applyTheme(preferences.theme);

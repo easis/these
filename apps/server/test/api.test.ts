@@ -219,6 +219,45 @@ describe("These API", () => {
     });
   });
 
+  it("serves PWA resources with their expected types and preserves the SPA fallback", async () => {
+    await app!.close();
+    app = undefined;
+    const webDistDir = path.join(temporary, "web-dist");
+    await mkdir(webDistDir);
+    await Promise.all([
+      writeFile(path.join(webDistDir, "index.html"), "<!doctype html><title>these</title>"),
+      writeFile(path.join(webDistDir, "manifest.webmanifest"), JSON.stringify({ name: "these" })),
+      writeFile(path.join(webDistDir, "sw.js"), "self.addEventListener('fetch', () => undefined);"),
+    ]);
+    const config = await loadConfig({
+      roots: await parseMediaRoots(`Library=${root}`),
+      dataDir,
+      logLevel: "silent",
+      migrationsDir: path.resolve("drizzle"),
+      webDistDir,
+    });
+    app = await buildApp(config);
+
+    const manifest = await app.inject({ method: "GET", url: "/manifest.webmanifest" });
+    expect(manifest.statusCode).toBe(200);
+    expect(manifest.headers["content-type"]).toMatch(/^application\/manifest\+json/);
+    expect(manifest.json()).toEqual({ name: "these" });
+
+    const serviceWorker = await app.inject({ method: "GET", url: "/sw.js" });
+    expect(serviceWorker.statusCode).toBe(200);
+    expect(serviceWorker.headers["content-type"]).toMatch(/^application\/javascript/);
+    expect(serviceWorker.headers["cache-control"]).toBe("public, max-age=0");
+
+    const clientRoute = await app.inject({ method: "GET", url: "/lists/42" });
+    expect(clientRoute.statusCode).toBe(200);
+    expect(clientRoute.headers["content-type"]).toMatch(/^text\/html/);
+    expect(clientRoute.body).toContain("<title>these</title>");
+
+    const missingApi = await app.inject({ method: "GET", url: "/api/not-a-route" });
+    expect(missingApi.statusCode).toBe(404);
+    expect(missingApi.json()).toMatchObject({ code: "NOT_FOUND" });
+  });
+
   it("streams full media and supports one normal or suffix byte range", async () => {
     const mediaPath = path.join(root, "clip.mp4");
     await writeFile(mediaPath, "0123456789");

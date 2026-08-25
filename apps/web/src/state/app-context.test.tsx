@@ -89,6 +89,16 @@ describe("AppProvider list creation", () => {
 
     expect(await screen.findByText("Active: Existing")).toBeInTheDocument();
   });
+
+  it("refreshes bootstrap when the browser reports that it is online again", async () => {
+    render(<AppProvider><ActiveListHarness /></AppProvider>);
+    expect(await screen.findByText("Active: Existing")).toBeInTheDocument();
+    expect(mocks.api.mock.calls.filter(([url]) => url === "/api/bootstrap")).toHaveLength(1);
+
+    window.dispatchEvent(new Event("online"));
+
+    await waitFor(() => expect(mocks.api.mock.calls.filter(([url]) => url === "/api/bootstrap")).toHaveLength(2));
+  });
 });
 
 function CreateListHarness() {
