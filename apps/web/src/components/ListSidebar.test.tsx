@@ -25,23 +25,39 @@ vi.mock("../state/app-context", () => ({
 describe("ListSidebar", () => {
   beforeEach(() => {
     mocks.setActiveList.mockReset();
+    mocks.setActiveList.mockResolvedValue(undefined);
     mocks.createList.mockReset();
     mocks.createList.mockResolvedValue(undefined);
   });
 
-  it("activates from the whole row and keeps management as a separate link", () => {
+  it("activates from the whole row and keeps management as a separate link", async () => {
     render(<MemoryRouter><ListSidebar /></MemoryRouter>);
 
     const activate = screen.getByRole("button", { name: "Make Review active" });
     expect(activate).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(activate);
     expect(mocks.setActiveList).toHaveBeenCalledWith(8);
+    await waitFor(() => expect(activate).not.toBeDisabled());
 
     expect(screen.getByRole("link", { name: "Manage Review" })).toHaveAttribute("href", "/lists/8");
     const deactivate = screen.getByRole("button", { name: "Deactivate Keepers" });
     expect(deactivate).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(deactivate);
     expect(mocks.setActiveList).toHaveBeenCalledWith(null);
+  });
+
+  it("blocks activation while pending and reports failures", async () => {
+    const activation = deferred<void>();
+    mocks.setActiveList.mockReturnValueOnce(activation.promise);
+    render(<MemoryRouter><ListSidebar /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Make Review active" }));
+    expect(screen.getByRole("complementary", { name: "Lists" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Deactivate Keepers" })).toBeDisabled();
+
+    activation.reject(new Error("Could not save the active list."));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save the active list.");
+    expect(screen.getByRole("button", { name: "Deactivate Keepers" })).not.toBeDisabled();
   });
 
   it("provides mouse controls for creating and cancelling a list", async () => {
@@ -83,3 +99,13 @@ describe("ListSidebar", () => {
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "List name" })).not.toBeInTheDocument());
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}

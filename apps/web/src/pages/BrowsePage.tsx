@@ -2,7 +2,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronRight, Eye, EyeOff, Folder, Image, PanelLeftClose, PanelRightClose, Pencil, Search, SlidersHorizontal, Star, Video } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { BrowseResponse, FolderEntry, ListItemStatus, MediaEntry, MediaKind } from "@these/shared";
+import type { BrowseResponse, FolderEntry, FolderMetadata, ListItemStatus, MediaEntry, MediaKind } from "@these/shared";
 import { FolderTree } from "../components/FolderTree";
 import { ListSidebar } from "../components/ListSidebar";
 import { MediaTile } from "../components/MediaTile";
@@ -17,14 +17,28 @@ export function BrowsePage() {
   const requestedPath = new URLSearchParams(location.search).get("path") ?? preferences.lastFolder ?? bootstrap?.roots.find((root) => root.available)?.path ?? null;
   const [response, setResponse] = useState<BrowseResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [mediaKinds, setMediaKinds] = useState<MediaKind[]>(["image", "video"]);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [pendingFolderPaths, setPendingFolderPaths] = useState<Set<string>>(() => new Set());
+  const [pendingMediaPaths, setPendingMediaPaths] = useState<Set<string>>(() => new Set());
   const requestSequence = useRef(0);
   const loadMoreController = useRef<AbortController | null>(null);
+  const displayedPath = useRef<string | null>(null);
+  const previousActiveListId = useRef<number | null | undefined>(undefined);
+  const currentActiveListId = useRef(activeList?.id ?? null);
+  const responseRef = useRef<BrowseResponse | null>(null);
+  const pendingFolderPathsRef = useRef(new Set<string>());
+  const pendingMediaPathsRef = useRef(new Set<string>());
+  const optimisticFolderPatches = useRef(new Map<string, FolderPatch>());
+  const optimisticMediaStatuses = useRef(new Map<string, ListItemStatus | null>());
   const kinds = mediaKinds.join(",");
+  const error = mutationError ?? requestError;
+  currentActiveListId.current = activeList?.id ?? null;
+  responseRef.current = response;
 
   useEffect(() => {
     if (!preferences.leftSidebarOpen || !preferences.rightSidebarOpen) return;
@@ -40,9 +54,19 @@ export function BrowsePage() {
   useEffect(() => {
     const sequence = ++requestSequence.current;
     loadMoreController.current?.abort();
-    setViewerIndex(null);
-    setResponse(null);
-    setError(null);
+    const activeListId = activeList?.id ?? null;
+    const activeListChanged = previousActiveListId.current !== undefined && previousActiveListId.current !== activeListId;
+    previousActiveListId.current = activeListId;
+    const navigating = displayedPath.current !== requestedPath;
+    if (navigating) {
+      setViewerIndex(null);
+      setResponse(null);
+      setRequestError(null);
+      setMutationError(null);
+    } else if (activeListChanged) {
+      optimisticMediaStatuses.current.clear();
+      setResponse((current) => current ? { ...current, media: current.media.map((entry) => entry.status === null ? entry : { ...entry, status: null }) } : current);
+    }
     if (!requestedPath) {
       setLoading(false);
       return;
@@ -53,12 +77,15 @@ export function BrowsePage() {
     void api<BrowseResponse>(`/api/browse?${query({ path: requestedPath, offset: 0, limit: 180, activeListId: activeList?.id, showHidden: preferences.showHidden, filter, kinds })}`, { signal: controller.signal })
       .then((next) => {
         if (sequence !== requestSequence.current) return;
-        setResponse(next);
+        displayedPath.current = next.path;
+        setResponse(applyOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden));
+        reconcileOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden);
+        setRequestError(null);
         setPreferences({ lastFolder: requestedPath });
       })
       .catch((caught: unknown) => {
         if (sequence === requestSequence.current && !isAbortError(caught)) {
-          setError(caught instanceof Error ? caught.message : "Could not open this folder.");
+          setRequestError(caught instanceof Error ? caught.message : "Could not open this folder.");
         }
       })
       .finally(() => {
@@ -79,11 +106,14 @@ export function BrowsePage() {
     try {
       const next = await api<BrowseResponse>(`/api/browse?${query({ path: requestedPath, offset: response.offset + response.limit, limit: response.limit, activeListId: activeList?.id, showHidden: preferences.showHidden, filter, kinds })}`, { signal: controller.signal });
       if (sequence !== requestSequence.current) return;
-      setResponse((current) => current && current.path === next.path ? { ...next, media: [...current.media, ...next.media] } : current);
-      setError(null);
+      setResponse((current) => current && current.path === next.path
+        ? applyOptimisticState({ ...next, media: [...current.media, ...next.media] }, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden)
+        : current);
+      reconcileOptimisticState(next, optimisticFolderPatches.current, optimisticMediaStatuses.current, preferences.showHidden);
+      setRequestError(null);
     } catch (caught) {
       if (sequence === requestSequence.current && !isAbortError(caught)) {
-        setError(caught instanceof Error ? caught.message : "Could not load more media.");
+        setRequestError(caught instanceof Error ? caught.message : "Could not load more media.");
       }
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
@@ -91,27 +121,55 @@ export function BrowsePage() {
   }, [activeList?.id, filter, kinds, loading, preferences.showHidden, requestedPath, response]);
 
   const classify = useCallback(async (item: MediaEntry, status: ListItemStatus | null) => {
+    if (pendingMediaPathsRef.current.has(item.path)) return;
+    const mutationListId = currentActiveListId.current;
+    pendingMediaPathsRef.current.add(item.path);
+    setPendingMediaPaths(new Set(pendingMediaPathsRef.current));
+    optimisticMediaStatuses.current.set(item.path, status);
     setResponse((current) => current ? { ...current, media: current.media.map((entry) => entry.path === item.path ? { ...entry, status } : entry) } : current);
     try {
       if (status) await setItemStatus(item, status);
       else await removeItem(item.path);
+      setMutationError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update the list.");
+      optimisticMediaStatuses.current.delete(item.path);
+      if (currentActiveListId.current === mutationListId) {
+        setResponse((current) => current ? { ...current, media: current.media.map((entry) => entry.path === item.path ? { ...entry, status: item.status } : entry) } : current);
+      }
+      setMutationError(caught instanceof Error ? caught.message : "Could not update the list.");
       setReloadVersion((value) => value + 1);
+    } finally {
+      pendingMediaPathsRef.current.delete(item.path);
+      setPendingMediaPaths(new Set(pendingMediaPathsRef.current));
     }
   }, [removeItem, setItemStatus]);
 
   const openFolder = (folderPath: string) => navigate(`/browse?${query({ path: folderPath })}`);
-  const updateFolder = async (folder: FolderEntry, patch: { alias?: string | null; favorite?: boolean; hidden?: boolean }) => {
+  const updateFolder = async (folder: FolderEntry, patch: FolderPatch) => {
+    if (pendingFolderPathsRef.current.has(folder.path)) return false;
+    const mutationBrowsePath = responseRef.current?.path;
+    const previousFolder = findBrowseFolder(responseRef.current, folder.path) ?? folder;
+    pendingFolderPathsRef.current.add(folder.path);
+    setPendingFolderPaths(new Set(pendingFolderPathsRef.current));
+    optimisticFolderPatches.current.set(folder.path, patch);
+    setResponse((current) => current ? applyFolderPatchToBrowse(current, folder.path, patch, preferences.showHidden) : current);
     try {
-      await api("/api/folder-metadata", { method: "POST", body: JSON.stringify({ path: folder.path, ...patch }) });
+      const saved = await api<FolderMetadata>("/api/folder-metadata", { method: "POST", body: JSON.stringify({ path: folder.path, ...patch }) });
+      const savedPatch: FolderPatch = { alias: saved.alias, favorite: saved.favorite, hidden: saved.hidden };
+      optimisticFolderPatches.current.set(folder.path, savedPatch);
+      setResponse((current) => current ? applyFolderPatchToBrowse(current, folder.path, savedPatch, preferences.showHidden) : current);
       setReloadVersion((value) => value + 1);
-      await refresh();
-      setError(null);
+      void refresh();
+      setMutationError(null);
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update the folder.");
+      optimisticFolderPatches.current.delete(folder.path);
+      setResponse((current) => current && current.path === mutationBrowsePath ? restoreBrowseFolder(current, previousFolder) : current);
+      setMutationError(caught instanceof Error ? caught.message : "Could not update the folder.");
       return false;
+    } finally {
+      pendingFolderPathsRef.current.delete(folder.path);
+      setPendingFolderPaths(new Set(pendingFolderPathsRef.current));
     }
   };
   const toggleMediaKind = (kind: MediaKind) => setMediaKinds((current) => {
@@ -134,7 +192,7 @@ export function BrowsePage() {
           <Breadcrumbs currentPath={response?.path ?? requestedPath} rootPath={response?.root.path} currentDisplayName={response?.currentFolder.displayName} onOpen={openFolder} />
           <span className="ml-auto" />
           {!preferences.rightSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ rightSidebarOpen: true, ...(matchMedia("(max-width: 720px)").matches ? { leftSidebarOpen: false } : {}) })} aria-label="Show lists sidebar"><PanelRightClose className="rotate-180" size={15} /></button> : null}
-          {response?.currentFolder ? <CurrentFolderActions folder={response.currentFolder} canHide={response.path !== response.root.path} onUpdate={updateFolder} onToggleHidden={toggleCurrentHidden} /> : null}
+          {response?.currentFolder ? <CurrentFolderActions folder={response.currentFolder} canHide={response.path !== response.root.path} pending={pendingFolderPaths.has(response.currentFolder.path)} onUpdate={updateFolder} onToggleHidden={toggleCurrentHidden} /> : null}
         </div>
         <div className="gallery-subtoolbar">
           {preferences.leftSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ leftSidebarOpen: false })} title="Collapse folders" aria-label="Collapse folders"><PanelLeftClose size={15} /></button> : null}
@@ -151,17 +209,17 @@ export function BrowsePage() {
           {preferences.rightSidebarOpen ? <button className="icon-button" type="button" onClick={() => setPreferences({ rightSidebarOpen: false })} title="Collapse lists" aria-label="Collapse lists"><PanelRightClose size={15} /></button> : null}
         </div>
         {error ? <div className="inline-error">{error}</div> : null}
-        <div className="gallery-scroll">
-          {response?.folders.length ? <FolderGrid folders={response.folders} onOpen={openFolder} onUpdate={updateFolder} /> : null}
-          {media.length ? <VirtualGallery media={media} size={preferences.thumbnailSize} activeList={Boolean(activeList)} hasMore={Boolean(response?.hasMore)} loading={loading} onLoadMore={() => void loadMore()} onOpen={setViewerIndex} onStatus={classify} />
-            : loading ? <div className="empty-gallery">Opening folder…</div>
+        <div className="gallery-scroll" aria-busy={loading}>
+          {response?.folders.length ? <FolderGrid folders={response.folders} pendingPaths={pendingFolderPaths} onOpen={openFolder} onUpdate={updateFolder} /> : null}
+          {media.length ? <VirtualGallery media={media} size={preferences.thumbnailSize} activeList={Boolean(activeList)} pendingPaths={pendingMediaPaths} hasMore={Boolean(response?.hasMore)} loading={loading} onLoadMore={() => void loadMore()} onOpen={setViewerIndex} onStatus={classify} />
+            : loading && !response ? <div className="empty-gallery">Opening folder…</div>
               : filter ? <div className="empty-gallery">No filenames match this filter.</div>
                 : response?.folders.length === 0 ? <div className="empty-gallery">{mediaKinds.length === 1 ? `No ${mediaKinds[0] === "image" ? "images" : "videos"} in this folder.` : "No media in this folder."}</div>
                   : null}
         </div>
       </section>
       {preferences.rightSidebarOpen ? <ListSidebar onClose={() => setPreferences({ rightSidebarOpen: false })} /> : null}
-      {viewerIndex !== null ? <Viewer items={media} index={viewerIndex} classificationContext={activeList ? `Active: ${activeList.name}` : null} classificationEnabled={Boolean(activeList)} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)} onStatus={(status) => void classify(media[viewerIndex]!, status)} /> : null}
+      {viewerIndex !== null ? <Viewer items={media} index={viewerIndex} classificationContext={activeList ? `Active: ${activeList.name}` : null} classificationEnabled={Boolean(activeList)} classificationPending={pendingMediaPaths.has(media[viewerIndex]?.path ?? "")} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)} onStatus={(status) => void classify(media[viewerIndex]!, status)} /> : null}
     </div>
   );
 }
@@ -175,43 +233,46 @@ function Breadcrumbs({ currentPath, rootPath, currentDisplayName, onOpen }: { cu
   return <nav className="breadcrumbs" aria-label="Folder path">{crumbs.map((crumb, index) => <span key={crumb.path}>{index ? <ChevronRight size={12} /> : null}<button type="button" onClick={() => onOpen(crumb.path)}>{crumb.label}</button></span>)}</nav>;
 }
 
-function CurrentFolderActions({ folder, canHide, onUpdate, onToggleHidden }: { folder: FolderEntry; canHide: boolean; onUpdate: (folder: FolderEntry, patch: { alias?: string | null; favorite?: boolean; hidden?: boolean }) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void> }) {
+function CurrentFolderActions({ folder, canHide, pending, onUpdate, onToggleHidden }: { folder: FolderEntry; canHide: boolean; pending: boolean; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [alias, setAlias] = useState("");
   if (editing) {
     return (
-      <form className="current-folder-alias-form" onSubmit={(event) => { event.preventDefault(); void onUpdate(folder, { alias }).then((saved) => saved && setEditing(false)); }}>
-        <input autoFocus value={alias} maxLength={160} onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => event.key === "Escape" && setEditing(false)} aria-label={`Alias for ${folder.name}`} />
-        <button type="submit">Save</button>
+      <form className="current-folder-alias-form" aria-busy={pending} onSubmit={(event) => { event.preventDefault(); void onUpdate(folder, { alias }).then((saved) => saved && setEditing(false)); }}>
+        <input autoFocus value={alias} maxLength={160} disabled={pending} onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => event.key === "Escape" && !pending && setEditing(false)} aria-label={`Alias for ${folder.name}`} />
+        <button type="submit" disabled={pending}>Save</button>
       </form>
     );
   }
   return (
-    <div className="current-folder-actions" role="group" aria-label="Current folder actions">
-      <button type="button" className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"} aria-label={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"}><Star size={13} fill={folder.favorite ? "currentColor" : "none"} /></button>
-      <button type="button" onClick={() => { setAlias(folder.displayName === folder.name ? "" : folder.displayName); setEditing(true); }} title="Edit current folder alias" aria-label="Edit current folder alias"><Pencil size={13} /></button>
-      <button type="button" className={folder.hidden ? "is-hidden" : ""} disabled={!canHide && !folder.hidden} aria-pressed={folder.hidden} onClick={() => void onToggleHidden(folder)} title={!canHide && !folder.hidden ? "The media root cannot be hidden here" : folder.hidden ? "Unhide current folder" : "Hide current folder"} aria-label={folder.hidden ? "Unhide current folder" : "Hide current folder"}>{folder.hidden ? <Eye size={13} /> : <EyeOff size={13} />}</button>
+    <div className="current-folder-actions" role="group" aria-label="Current folder actions" aria-busy={pending}>
+      <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"} aria-label={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"}><Star size={13} fill={folder.favorite ? "currentColor" : "none"} /></button>
+      <button type="button" disabled={pending} onClick={() => { setAlias(folder.displayName === folder.name ? "" : folder.displayName); setEditing(true); }} title="Edit current folder alias" aria-label="Edit current folder alias"><Pencil size={13} /></button>
+      <button type="button" className={folder.hidden ? "is-hidden" : ""} disabled={pending || (!canHide && !folder.hidden)} aria-pressed={folder.hidden} onClick={() => void onToggleHidden(folder)} title={!canHide && !folder.hidden ? "The media root cannot be hidden here" : folder.hidden ? "Unhide current folder" : "Hide current folder"} aria-label={folder.hidden ? "Unhide current folder" : "Hide current folder"}>{folder.hidden ? <Eye size={13} /> : <EyeOff size={13} />}</button>
     </div>
   );
 }
 
-function FolderGrid({ folders, onOpen, onUpdate }: { folders: FolderEntry[]; onOpen: (path: string) => void; onUpdate: (folder: FolderEntry, patch: { alias?: string | null; favorite?: boolean; hidden?: boolean }) => Promise<boolean> }) {
+function FolderGrid({ folders, pendingPaths, onOpen, onUpdate }: { folders: FolderEntry[]; pendingPaths: Set<string>; onOpen: (path: string) => void; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean> }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [alias, setAlias] = useState("");
   return (
     <section className="folder-grid" aria-label="Folders in this directory">
-      {folders.map((folder) => (
-        <div className={`folder-item ${folder.hidden ? "is-hidden" : ""}`} key={folder.path}>
-          <button type="button" className="folder-open" onClick={() => onOpen(folder.path)} title={folder.path}><Folder size={15} fill="currentColor" fillOpacity={0.08} /><span className="truncate">{folder.displayName}</span></button>
-          {editing === folder.path ? <form className="folder-alias-form" onSubmit={(event) => { event.preventDefault(); void onUpdate(folder, { alias }).then((saved) => saved && setEditing(null)); }}><input autoFocus value={alias} maxLength={160} onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => event.key === "Escape" && setEditing(null)} aria-label={`Alias for ${folder.name}`} /><button type="submit">Save</button></form> : (
-            <span className="folder-actions">
-              <button type="button" className={folder.favorite ? "is-favorite" : ""} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={12} fill={folder.favorite ? "currentColor" : "none"} /></button>
-              <button type="button" onClick={() => { setEditing(folder.path); setAlias(folder.displayName === folder.name ? "" : folder.displayName); }} title="Edit alias" aria-label="Edit alias"><Pencil size={12} /></button>
-              <button type="button" className={folder.hidden ? "is-hidden" : ""} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={12} /> : <EyeOff size={12} />}</button>
-            </span>
-          )}
-        </div>
-      ))}
+      {folders.map((folder) => {
+        const pending = pendingPaths.has(folder.path);
+        return (
+          <div className={`folder-item ${folder.hidden ? "is-hidden" : ""}`} key={folder.path} aria-busy={pending}>
+            <button type="button" className="folder-open" onClick={() => onOpen(folder.path)} title={folder.path}><Folder size={15} fill="currentColor" fillOpacity={0.08} /><span className="truncate">{folder.displayName}</span></button>
+            {editing === folder.path ? <form className="folder-alias-form" onSubmit={(event) => { event.preventDefault(); void onUpdate(folder, { alias }).then((saved) => saved && setEditing(null)); }}><input autoFocus value={alias} maxLength={160} disabled={pending} onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => event.key === "Escape" && !pending && setEditing(null)} aria-label={`Alias for ${folder.name}`} /><button type="submit" disabled={pending}>Save</button></form> : (
+              <span className="folder-actions">
+                <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={12} fill={folder.favorite ? "currentColor" : "none"} /></button>
+                <button type="button" disabled={pending} onClick={() => { setEditing(folder.path); setAlias(folder.displayName === folder.name ? "" : folder.displayName); }} title="Edit alias" aria-label="Edit alias"><Pencil size={12} /></button>
+                <button type="button" disabled={pending} className={folder.hidden ? "is-hidden" : ""} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={12} /> : <EyeOff size={12} />}</button>
+              </span>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -222,7 +283,7 @@ function parentFolderPath(folderPath: string, rootPath: string) {
   return parentPath.startsWith(rootPath) ? parentPath : rootPath;
 }
 
-function VirtualGallery({ media, size, activeList, hasMore, loading, onLoadMore, onOpen, onStatus }: { media: MediaEntry[]; size: number; activeList: boolean; hasMore: boolean; loading: boolean; onLoadMore: () => void; onOpen: (index: number) => void; onStatus: (item: MediaEntry, status: ListItemStatus | null) => void }) {
+function VirtualGallery({ media, size, activeList, pendingPaths, hasMore, loading, onLoadMore, onOpen, onStatus }: { media: MediaEntry[]; size: number; activeList: boolean; pendingPaths: Set<string>; hasMore: boolean; loading: boolean; onLoadMore: () => void; onOpen: (index: number) => void; onStatus: (item: MediaEntry, status: ListItemStatus | null) => void }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   useEffect(() => {
@@ -242,7 +303,7 @@ function VirtualGallery({ media, size, activeList, hasMore, loading, onLoadMore,
           <div key={row.key} className="absolute left-0 top-0 grid w-full" style={{ transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: `${gap}px`, height: `${row.size - gap}px` }}>
             {media.slice(row.index * columns, row.index * columns + columns).map((item, column) => {
               const itemIndex = row.index * columns + column;
-              return <MediaTile key={item.path} media={item} size={size} activeList={activeList} onOpen={() => onOpen(itemIndex)} onStatus={(status) => onStatus(item, status)} />;
+              return <MediaTile key={item.path} media={item} size={size} activeList={activeList} classificationPending={pendingPaths.has(item.path)} onOpen={() => onOpen(itemIndex)} onStatus={(status) => onStatus(item, status)} />;
             })}
           </div>
         ))}
@@ -250,4 +311,70 @@ function VirtualGallery({ media, size, activeList, hasMore, loading, onLoadMore,
       </div>
     </div>
   );
+}
+
+type FolderPatch = { alias?: string | null; favorite?: boolean; hidden?: boolean };
+
+function patchFolder(folder: FolderEntry, patch: FolderPatch): FolderEntry {
+  return {
+    ...folder,
+    ...(patch.alias === undefined ? {} : { displayName: patch.alias?.trim() || folder.name }),
+    ...(patch.favorite === undefined ? {} : { favorite: patch.favorite }),
+    ...(patch.hidden === undefined ? {} : { hidden: patch.hidden }),
+  };
+}
+
+function findBrowseFolder(response: BrowseResponse | null, folderPath: string) {
+  if (!response) return undefined;
+  if (response.currentFolder.path === folderPath) return response.currentFolder;
+  return response.folders.find((folder) => folder.path === folderPath);
+}
+
+function applyFolderPatchToBrowse(response: BrowseResponse, folderPath: string, patch: FolderPatch, showHidden: boolean): BrowseResponse {
+  if (response.currentFolder.path === folderPath) {
+    return { ...response, currentFolder: patchFolder(response.currentFolder, patch) };
+  }
+  if (!response.folders.some((folder) => folder.path === folderPath)) return response;
+  const folders = response.folders
+    .map((folder) => folder.path === folderPath ? patchFolder(folder, patch) : folder)
+    .filter((folder) => showHidden || !folder.hidden)
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true }));
+  return { ...response, folders };
+}
+
+function restoreBrowseFolder(response: BrowseResponse, folder: FolderEntry): BrowseResponse {
+  if (response.currentFolder.path === folder.path) return { ...response, currentFolder: folder };
+  const existing = response.folders.some((entry) => entry.path === folder.path);
+  const folders = (existing
+    ? response.folders.map((entry) => entry.path === folder.path ? folder : entry)
+    : [...response.folders, folder]
+  ).sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true }));
+  return { ...response, folders };
+}
+
+function applyOptimisticState(response: BrowseResponse, folderPatches: Map<string, FolderPatch>, mediaStatuses: Map<string, ListItemStatus | null>, showHidden: boolean) {
+  let next = response;
+  for (const [folderPath, patch] of folderPatches) next = applyFolderPatchToBrowse(next, folderPath, patch, showHidden);
+  if (mediaStatuses.size) {
+    next = { ...next, media: next.media.map((entry) => mediaStatuses.has(entry.path) ? { ...entry, status: mediaStatuses.get(entry.path)! } : entry) };
+  }
+  return next;
+}
+
+function reconcileOptimisticState(response: BrowseResponse, folderPatches: Map<string, FolderPatch>, mediaStatuses: Map<string, ListItemStatus | null>, showHidden: boolean) {
+  for (const [folderPath, patch] of folderPatches) {
+    const folder = findBrowseFolder(response, folderPath);
+    const hiddenFolderOmitted = patch.hidden === true && !showHidden && response.currentFolder.path !== folderPath && !folder;
+    if (hiddenFolderOmitted || (folder && folderMatchesPatch(folder, patch))) folderPatches.delete(folderPath);
+  }
+  for (const [mediaPath, status] of mediaStatuses) {
+    if (response.media.some((entry) => entry.path === mediaPath && entry.status === status)) mediaStatuses.delete(mediaPath);
+  }
+}
+
+function folderMatchesPatch(folder: FolderEntry, patch: FolderPatch) {
+  if (patch.alias !== undefined && folder.displayName !== (patch.alias?.trim() || folder.name)) return false;
+  if (patch.favorite !== undefined && folder.favorite !== patch.favorite) return false;
+  if (patch.hidden !== undefined && folder.hidden !== patch.hidden) return false;
+  return true;
 }

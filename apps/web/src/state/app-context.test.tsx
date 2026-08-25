@@ -49,9 +49,64 @@ describe("AppProvider list creation", () => {
     expect(mocks.api.mock.calls.some(([url]) => url === "/api/settings/active-list")).toBe(false);
     expect(screen.getByText("Active: Existing")).toBeInTheDocument();
   });
+
+  it("changes the active list optimistically and reconciles after success", async () => {
+    const update = deferred<void>();
+    let activeListId = 1;
+    mocks.api.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/bootstrap") return { ...bootstrap, activeListId };
+      if (url === "/api/settings/active-list" && init?.method === "PUT") {
+        await update.promise;
+        activeListId = 2;
+        return { activeListId };
+      }
+      return undefined;
+    });
+    render(<AppProvider><ActiveListHarness /></AppProvider>);
+    expect(await screen.findByText("Active: Existing")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Activate Archive" }));
+    expect(screen.getByText("Active: Archive")).toBeInTheDocument();
+
+    update.resolve();
+    await waitFor(() => expect(mocks.api.mock.calls.filter(([url]) => url === "/api/bootstrap")).toHaveLength(2));
+    expect(screen.getByText("Active: Archive")).toBeInTheDocument();
+  });
+
+  it("restores the previous active list when the update fails", async () => {
+    const update = deferred<void>();
+    mocks.api.mockImplementation(async (url: string) => {
+      if (url === "/api/bootstrap") return bootstrap;
+      if (url === "/api/settings/active-list") return update.promise;
+      return undefined;
+    });
+    render(<AppProvider><ActiveListHarness /></AppProvider>);
+    expect(await screen.findByText("Active: Existing")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Activate Archive" }));
+    expect(screen.getByText("Active: Archive")).toBeInTheDocument();
+    update.reject(new Error("Write failed."));
+
+    expect(await screen.findByText("Active: Existing")).toBeInTheDocument();
+  });
 });
 
 function CreateListHarness() {
   const { activeList, createList } = useApp();
   return <><span>Active: {activeList?.name ?? "None"}</span><button type="button" onClick={() => void createList("Archive")}>Create Archive</button></>;
+}
+
+function ActiveListHarness() {
+  const { activeList, setActiveList } = useApp();
+  return <><span>Active: {activeList?.name ?? "None"}</span><button type="button" onClick={() => void setActiveList(2).catch(() => undefined)}>Activate Archive</button></>;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }

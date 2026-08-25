@@ -54,9 +54,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setActiveList = useCallback(async (id: number | null) => {
-    await api("/api/settings/active-list", { method: "PUT", body: JSON.stringify({ activeListId: id }) });
-    await refresh();
-  }, [refresh]);
+    const previousId = bootstrap?.activeListId ?? null;
+    setBootstrap((current) => current ? { ...current, activeListId: id } : current);
+    try {
+      await api("/api/settings/active-list", { method: "PUT", body: JSON.stringify({ activeListId: id }) });
+      void refresh();
+    } catch (caught) {
+      setBootstrap((current) => current?.activeListId === id ? { ...current, activeListId: previousId } : current);
+      throw caught;
+    }
+  }, [bootstrap?.activeListId, refresh]);
 
   const createList = useCallback(async (name: string) => {
     const list = await api<TheseList>("/api/lists", { method: "POST", body: JSON.stringify({ name }) });
@@ -72,13 +79,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       method: "PUT",
       body: JSON.stringify({ path: media.path, kind: media.kind, status }),
     });
-    await refresh();
+    void refresh();
   }, [bootstrap?.activeListId, refresh]);
 
   const removeItem = useCallback(async (mediaPath: string) => {
     if (!bootstrap?.activeListId) return;
     await api(`/api/lists/${bootstrap.activeListId}/items?${new URLSearchParams({ path: mediaPath })}`, { method: "DELETE" });
-    await refresh();
+    void refresh();
   }, [bootstrap?.activeListId, refresh]);
 
   const value = useMemo<AppContextValue>(() => ({
