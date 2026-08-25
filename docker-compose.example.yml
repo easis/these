@@ -1,7 +1,6 @@
 services:
   these:
-    build: .
-    image: these:local
+    image: ghcr.io/easis/these:latest
     container_name: these
     restart: unless-stopped
     ports:
