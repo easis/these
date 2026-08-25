@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell";
@@ -24,5 +24,16 @@ describe("AppShell theme switcher", () => {
     expect(screen.getByRole("button", { name: "System theme" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Dark theme" }));
     expect(mocks.setPreferences).toHaveBeenCalledWith({ theme: "dark" });
+  });
+
+  it("exposes labeled desktop and mobile navigation with the current section active", () => {
+    render(<MemoryRouter initialEntries={["/lists/12"]}><AppShell /></MemoryRouter>);
+
+    const desktopNavigation = screen.getByRole("navigation", { name: "Main navigation" });
+    const mobileNavigation = screen.getByRole("navigation", { name: "Mobile navigation" });
+    expect(within(desktopNavigation).getAllByRole("link")).toHaveLength(4);
+    expect(within(mobileNavigation).getAllByRole("link")).toHaveLength(4);
+    expect(within(mobileNavigation).getByRole("link", { name: "Lists" })).toHaveClass("is-active");
+    expect(within(mobileNavigation).getByRole("link", { name: "Browse" })).not.toHaveClass("is-active");
   });
 });

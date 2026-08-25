@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { BrowseResponse } from "@these/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -90,6 +90,14 @@ describe("FolderTree", () => {
     mocks.showHidden = true;
     rerender(<FolderTree currentPath="/media" hiddenOverrides={overrides} />);
     expect(screen.getByRole("button", { name: "Trip" })).toHaveClass("is-hidden");
+  });
+
+  it("notifies the parent after navigating to a folder", () => {
+    const onNavigate = vi.fn();
+    render(<FolderTree currentPath={null} onNavigate={onNavigate} />, { wrapper: MemoryRouter });
+
+    fireEvent.click(screen.getByTitle("/media"));
+    expect(onNavigate).toHaveBeenCalledOnce();
   });
 });
 

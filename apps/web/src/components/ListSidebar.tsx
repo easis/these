@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../state/app-context";
 
-export function ListSidebar({ onClose }: { onClose?: () => void }) {
+export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?: () => void; onSelection?: () => void; modal?: boolean }) {
   const { bootstrap, activeList, setActiveList, createList } = useApp();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -19,6 +19,7 @@ export function ListSidebar({ onClose }: { onClose?: () => void }) {
     setActivationError(null);
     try {
       await setActiveList(id);
+      onSelection?.();
     } catch (caught) {
       setActivationError(caught instanceof Error ? caught.message : "Could not change the active list.");
     } finally {
@@ -27,7 +28,7 @@ export function ListSidebar({ onClose }: { onClose?: () => void }) {
     }
   };
   return (
-    <aside className="side-panel right-panel" aria-label="Lists" aria-busy={activating}>
+    <aside id="list-sidebar" className="side-panel right-panel" role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Lists" aria-busy={activating} tabIndex={modal ? -1 : undefined}>
       <div className="panel-heading">
         <span>Lists</span>
         <span className="panel-heading-actions">
@@ -74,7 +75,7 @@ export function ListSidebar({ onClose }: { onClose?: () => void }) {
                   </span>
                 </span>
               </button>
-              <Link className="list-manage icon-button" to={`/lists/${list.id}`} title={`Manage ${list.name}`} aria-label={`Manage ${list.name}`}><Settings2 size={14} /></Link>
+              <Link className="list-manage icon-button" to={`/lists/${list.id}`} onClick={onSelection} title={`Manage ${list.name}`} aria-label={`Manage ${list.name}`}><Settings2 size={14} /></Link>
             </div>
           );
         }) : <p className="empty-compact">No lists yet.<br />Create one to start selecting.</p>}
