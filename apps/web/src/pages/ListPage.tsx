@@ -73,7 +73,7 @@ export function ListPage() {
       {error ? <div className="inline-error">{error}</div> : null}
       <ListGroup title="Selected" icon={<Check size={14} />} items={selected} empty="No selected media." onStatus={setStatus} onOpen={(item) => setViewerIndex(viewerItems.findIndex((entry) => entry.path === item.path))} />
       <ListGroup title="Maybe" icon={<CircleHelp size={14} />} items={maybe} empty="No maybe media." onStatus={setStatus} onOpen={(item) => setViewerIndex(viewerItems.findIndex((entry) => entry.path === item.path))} />
-      {viewerIndex !== null && viewerIndex >= 0 ? <Viewer items={viewerItems} index={viewerIndex} classificationContext={list ? `List: ${list.name}` : null} classificationEnabled={Boolean(list)} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)} onStatus={(status) => void setStatus(viewerItems[viewerIndex]!, status)} /> : null}
+      {viewerIndex !== null && viewerIndex >= 0 ? <Viewer items={viewerItems} index={viewerIndex} classificationContext={list?.name ?? null} classificationEnabled={Boolean(list)} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)} onStatus={(status) => void setStatus(viewerItems[viewerIndex]!, status)} /> : null}
     </div></div>
   );
 }

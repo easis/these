@@ -51,7 +51,7 @@ describe("ListPage viewer", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open reviewed.jpg" }));
 
     const viewer = screen.getByRole("dialog", { name: "reviewed.jpg" });
-    expect(within(viewer).getByText("List: Reviewed delivery")).toBeInTheDocument();
+    expect(within(viewer).getByText("Reviewed delivery", { selector: ".viewer-context-chip" })).toBeInTheDocument();
     expect(within(viewer).queryByText(/Different active list/)).not.toBeInTheDocument();
     fireEvent.click(within(viewer).getByRole("button", { name: /Maybe/ }));
 

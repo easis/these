@@ -310,6 +310,29 @@ describe("BrowsePage requests", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 
+  it("shows only the active list name in a viewer chip", async () => {
+    mocks.activeList = list(7, "Keepers");
+    mocks.api.mockResolvedValue(browseResponse("/media", 1, { media: [mediaEntry("/media/first.jpg")] }));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
+
+    const viewer = screen.getByRole("dialog", { name: "first.jpg" });
+    expect(within(viewer).getByText("Keepers", { selector: ".viewer-context-chip" })).toBeInTheDocument();
+    expect(within(viewer).queryByText("Active: Keepers")).not.toBeInTheDocument();
+  });
+
+  it("omits the viewer context when there is no active list", async () => {
+    mocks.api.mockResolvedValue(browseResponse("/media", 1, { media: [mediaEntry("/media/first.jpg")] }));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
+
+    const viewer = screen.getByRole("dialog", { name: "first.jpg" });
+    expect(within(viewer).queryByText("Classification unavailable")).not.toBeInTheDocument();
+    expect(viewer.querySelector(".viewer-context-chip")).not.toBeInTheDocument();
+  });
+
   it("continues prefetching when a page has no available media", async () => {
     mocks.api.mockImplementation(async (url: string) => {
       const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
