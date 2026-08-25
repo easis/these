@@ -6,6 +6,8 @@ import { FolderTree } from "./FolderTree";
 
 const mocks = vi.hoisted(() => ({
   api: vi.fn(),
+  leftSidebarWidth: 300,
+  setPreferences: vi.fn(),
   showHidden: false,
   favorites: [] as Array<{ id: number; path: string; alias: string | null; favorite: boolean; hidden: boolean; status: "ok"; createdAt: string; updatedAt: string }>,
 }));
@@ -21,15 +23,19 @@ vi.mock("../state/app-context", () => ({
       roots: [{ id: "library", label: "Library", path: "/media", available: true }],
       favorites: mocks.favorites,
     },
-    preferences: { showHidden: mocks.showHidden },
+    preferences: { leftSidebarWidth: mocks.leftSidebarWidth, showHidden: mocks.showHidden },
+    setPreferences: mocks.setPreferences,
   }),
 }));
 
 describe("FolderTree", () => {
   beforeEach(() => {
     mocks.api.mockReset();
+    mocks.leftSidebarWidth = 300;
+    mocks.setPreferences.mockReset();
     mocks.showHidden = false;
     mocks.favorites = [];
+    vi.stubGlobal("innerWidth", 1280);
   });
 
   it("reloads expanded branches for Show hidden and ignores the obsolete response", async () => {
@@ -99,6 +105,59 @@ describe("FolderTree", () => {
     fireEvent.click(screen.getByTitle("/media"));
     expect(onNavigate).toHaveBeenCalledOnce();
   });
+
+  it("exposes an accessible desktop separator and resizes with the keyboard", () => {
+    render(<FolderTree currentPath={null} />, { wrapper: MemoryRouter });
+
+    const sidebar = screen.getByRole("complementary", { name: "Folders" });
+    const resize = screen.getByRole("separator", { name: "Resize folder sidebar" });
+    expect(sidebar.style.getPropertyValue("--folder-sidebar-width")).toBe("300px");
+    expect(resize).toHaveAttribute("aria-valuemin", "220");
+    expect(resize).toHaveAttribute("aria-valuemax", "480");
+    expect(resize).toHaveAttribute("aria-valuenow", "300");
+
+    fireEvent.keyDown(resize, { key: "ArrowRight" });
+    expect(mocks.setPreferences).toHaveBeenLastCalledWith({ leftSidebarWidth: 316 });
+    expect(resize).toHaveAttribute("aria-valuenow", "316");
+
+    fireEvent.keyDown(resize, { key: "Home" });
+    expect(mocks.setPreferences).toHaveBeenLastCalledWith({ leftSidebarWidth: 220 });
+
+    fireEvent.keyDown(resize, { key: "End" });
+    expect(mocks.setPreferences).toHaveBeenLastCalledWith({ leftSidebarWidth: 480 });
+  });
+
+  it("resizes with the pointer and preserves the transient width across rerenders", () => {
+    const { rerender } = render(<FolderTree currentPath={null} />, { wrapper: MemoryRouter });
+    const resize = screen.getByRole("separator", { name: "Resize folder sidebar" });
+
+    fireEvent(resize, pointerEvent("pointerdown", { button: 0, pointerId: 4, clientX: 300 }));
+    fireEvent(resize, pointerEvent("pointermove", { pointerId: 4, clientX: 390 }));
+    expect(mocks.setPreferences).not.toHaveBeenCalled();
+    expect(resize).toHaveAttribute("aria-valuenow", "390");
+
+    rerender(<FolderTree currentPath={null} />);
+    fireEvent(resize, pointerEvent("pointerup", { pointerId: 4, clientX: 390 }));
+    expect(mocks.setPreferences).toHaveBeenCalledOnce();
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ leftSidebarWidth: 390 });
+  });
+
+  it("caps a saved width to 42 percent of a narrower desktop viewport", () => {
+    mocks.leftSidebarWidth = 480;
+    vi.stubGlobal("innerWidth", 800);
+    render(<FolderTree currentPath={null} />, { wrapper: MemoryRouter });
+
+    const sidebar = screen.getByRole("complementary", { name: "Folders" });
+    const resize = screen.getByRole("separator", { name: "Resize folder sidebar" });
+    expect(sidebar.style.getPropertyValue("--folder-sidebar-width")).toBe("336px");
+    expect(resize).toHaveAttribute("aria-valuemax", "336");
+    expect(resize).toHaveAttribute("aria-valuenow", "336");
+  });
+
+  it("does not render the desktop separator in the compact modal", () => {
+    render(<FolderTree currentPath={null} modal />, { wrapper: MemoryRouter });
+    expect(screen.queryByRole("separator", { name: "Resize folder sidebar" })).not.toBeInTheDocument();
+  });
 });
 
 function treeResponse(name: string, folderPath: string, hidden = false): BrowseResponse {
@@ -113,4 +172,14 @@ function treeResponse(name: string, folderPath: string, hidden = false): BrowseR
     limit: 1,
     hasMore: false,
   };
+}
+
+function pointerEvent(type: string, values: { button?: number; pointerId: number; clientX: number }) {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperties(event, {
+    button: { value: values.button ?? 0 },
+    pointerId: { value: values.pointerId },
+    clientX: { value: values.clientX },
+  });
+  return event;
 }
