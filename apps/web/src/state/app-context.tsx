@@ -60,7 +60,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const createList = useCallback(async (name: string) => {
     const list = await api<TheseList>("/api/lists", { method: "POST", body: JSON.stringify({ name }) });
-    await api("/api/settings/active-list", { method: "PUT", body: JSON.stringify({ activeListId: list.id }) });
     await refresh();
     return list;
   }, [refresh]);

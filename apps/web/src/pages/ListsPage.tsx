@@ -1,6 +1,8 @@
 import { ArrowRight, Check, CircleHelp, Download, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import type { TheseList } from "@these/shared";
+import { startListDownload } from "../lib/downloads";
 import { useApp } from "../state/app-context";
 
 export function ListsPage() {
@@ -17,13 +19,22 @@ export function ListsPage() {
           <article key={list.id} className={`list-index-row ${activeList?.id === list.id ? "is-active" : ""}`}>
             <button type="button" className="active-ring-control" onClick={() => void setActiveList(list.id)} aria-label={`Make ${list.name} active`}><span className="active-ring" /></button>
             <Link to={`/lists/${list.id}`} className="min-w-0 flex-1"><strong className="truncate">{list.name}</strong><span className="list-counts"><span><Check size={13} />{list.selectedCount} selected</span><span><CircleHelp size={13} />{list.maybeCount} maybe</span></span></Link>
-            <a className="icon-button" href={`/api/lists/${list.id}/download?status=selected`} title="Download Selected" aria-label={`Download selected from ${list.name}`}><Download size={15} /></a>
+            <button className="icon-button" type="button" disabled={list.selectedCount === 0} title="Download Selected" aria-label={`Download selected from ${list.name}`} onClick={() => confirmDownload(list)}><Download size={15} /></button>
             <Link className="icon-button" to={`/lists/${list.id}`} aria-label={`Open ${list.name}`}><ArrowRight size={16} /></Link>
           </article>
         ))}
-      </div> : <div className="empty-state"><ListEmptyMark /><h2>No lists yet</h2><p>Create a list above. It becomes active immediately, so selection can start without another step.</p></div>}
+      </div> : <div className="empty-state"><ListEmptyMark /><h2>No lists yet</h2><p>Create a list above, then make it active when you are ready to start selecting.</p></div>}
     </div></div>
   );
 }
 
 function ListEmptyMark() { return <div className="empty-mark"><Check size={17} /><CircleHelp size={17} /></div>; }
+
+function confirmDownload(list: TheseList) {
+  const count = list.selectedCount.toLocaleString("en-US");
+  const files = list.selectedCount === 1 ? "file" : "files";
+  const confirmed = window.confirm(
+    `Download ${count} selected ${files} from “${list.name}”?\n\nThe server will read and compress them into a ZIP. Large lists can take a while and use significant server resources. Missing files will be skipped.`,
+  );
+  if (confirmed) startListDownload(list.id, "selected");
+}
