@@ -267,6 +267,187 @@ describe("BrowsePage requests", () => {
     })).toBe(true));
   });
 
+  it("prefetches from the last loaded item and queues one advance without duplicate requests", async () => {
+    const secondPage = deferred<BrowseResponse>();
+    mocks.api.mockImplementation((url: string) => {
+      const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
+      if (offset === 0) {
+        return Promise.resolve(browseResponse("/media", 3, {
+          limit: 1,
+          hasMore: true,
+          media: [mediaEntry("/media/first.jpg")],
+        }));
+      }
+      if (offset === 1) return secondPage.promise;
+      return Promise.resolve(browseResponse("/media", 3, {
+        offset: 2,
+        limit: 1,
+        media: [mediaEntry("/media/third.jpg")],
+      }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
+    await waitFor(() => expect(requestsAtOffset(1)).toHaveLength(1));
+
+    const firstViewer = screen.getByRole("dialog", { name: "first.jpg" });
+    fireEvent.click(within(firstViewer).getByRole("button", { name: "Next" }));
+    expect(within(firstViewer).getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(requestsAtOffset(1)).toHaveLength(1);
+
+    secondPage.resolve(browseResponse("/media", 3, {
+      offset: 1,
+      limit: 1,
+      hasMore: true,
+      media: [mediaEntry("/media/second.jpg")],
+    }));
+    expect(await screen.findByRole("dialog", { name: "second.jpg" })).toBeInTheDocument();
+    await waitFor(() => expect(requestsAtOffset(2)).toHaveLength(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Next" })).toBeEnabled());
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(await screen.findByRole("dialog", { name: "third.jpg" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+
+  it("continues prefetching when a page has no available media", async () => {
+    mocks.api.mockImplementation(async (url: string) => {
+      const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
+      if (offset === 0) {
+        return browseResponse("/media", 3, {
+          limit: 1,
+          hasMore: true,
+          media: [mediaEntry("/media/first.jpg")],
+        });
+      }
+      if (offset === 1) return browseResponse("/media", 3, { offset: 1, limit: 1, hasMore: true });
+      return browseResponse("/media", 3, {
+        offset: 2,
+        limit: 1,
+        media: [mediaEntry("/media/third.jpg")],
+      });
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
+
+    await waitFor(() => expect(requestsAtOffset(2)).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("dialog", { name: "third.jpg" })).toBeInTheDocument();
+  });
+
+  it("keeps the current item after a failed prefetch and retries from Next", async () => {
+    let pageAttempts = 0;
+    mocks.api.mockImplementation((url: string) => {
+      const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
+      if (offset === 0) {
+        return Promise.resolve(browseResponse("/media", 2, {
+          limit: 1,
+          hasMore: true,
+          media: [mediaEntry("/media/first.jpg")],
+        }));
+      }
+      pageAttempts += 1;
+      if (pageAttempts === 1) return Promise.reject(new Error("Could not prefetch media."));
+      return Promise.resolve(browseResponse("/media", 2, {
+        offset: 1,
+        limit: 1,
+        media: [mediaEntry("/media/second.jpg")],
+      }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
+    expect(await screen.findByText("Could not prefetch media.")).toBeInTheDocument();
+
+    const viewer = screen.getByRole("dialog", { name: "first.jpg" });
+    const next = within(viewer).getByRole("button", { name: "Next" });
+    expect(next).toBeEnabled();
+    fireEvent.click(next);
+
+    expect(await screen.findByRole("dialog", { name: "second.jpg" })).toBeInTheDocument();
+    expect(pageAttempts).toBe(2);
+  });
+
+  it("waits for a same-folder revalidation before loading the next viewer page", async () => {
+    const stalePage = deferred<BrowseResponse>();
+    const revalidated = deferred<BrowseResponse>();
+    let baseRequests = 0;
+    let pageRequests = 0;
+    mocks.activeList = list(7, "Keepers");
+    mocks.setItemStatus.mockRejectedValue(new Error("Could not classify the file."));
+    mocks.api.mockImplementation((url: string) => {
+      const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
+      if (offset === 0) {
+        baseRequests += 1;
+        if (baseRequests === 1) {
+          return Promise.resolve(browseResponse("/media", 2, {
+            limit: 1,
+            hasMore: true,
+            media: [mediaEntry("/media/first.jpg")],
+          }));
+        }
+        return revalidated.promise;
+      }
+      pageRequests += 1;
+      if (pageRequests === 1) return stalePage.promise;
+      return Promise.resolve(browseResponse("/media", 2, {
+        offset: 1,
+        limit: 1,
+        media: [mediaEntry("/media/second.jpg")],
+      }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
+    await waitFor(() => expect(pageRequests).toBe(1));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Selected/ }));
+    expect(await screen.findByText("Could not classify the file.")).toBeInTheDocument();
+    await waitFor(() => expect(baseRequests).toBe(2));
+
+    stalePage.resolve(browseResponse("/media", 2, {
+      offset: 1,
+      limit: 1,
+      media: [mediaEntry("/media/second.jpg")],
+    }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Next" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(pageRequests).toBe(1);
+
+    revalidated.resolve(browseResponse("/media", 2, {
+      limit: 1,
+      hasMore: true,
+      media: [mediaEntry("/media/first.jpg")],
+    }));
+    expect(await screen.findByRole("dialog", { name: "second.jpg" })).toBeInTheDocument();
+    expect(pageRequests).toBe(2);
+  });
+
+  it("does not apply a queued advance to a viewer reopened while the next page is loading", async () => {
+    const secondPage = deferred<BrowseResponse>();
+    mocks.api.mockImplementation((url: string) => {
+      const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
+      return offset === 0
+        ? Promise.resolve(browseResponse("/media", 2, { limit: 1, hasMore: true, media: [mediaEntry("/media/first.jpg")] }))
+        : secondPage.promise;
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
+    await waitFor(() => expect(requestsAtOffset(1)).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close viewer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open first.jpg" }));
+
+    secondPage.resolve(browseResponse("/media", 2, {
+      offset: 1,
+      limit: 1,
+      media: [mediaEntry("/media/second.jpg")],
+    }));
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "first.jpg" })).toBeInTheDocument());
+    expect(screen.queryByRole("dialog", { name: "second.jpg" })).not.toBeInTheDocument();
+  });
+
   it("shows subfolders without an incorrect empty-media message", async () => {
     mocks.api.mockResolvedValue(browseResponse("/media", 0, {
       folders: [{
@@ -482,4 +663,8 @@ function deferred<T>() {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
+}
+
+function requestsAtOffset(offset: number) {
+  return mocks.api.mock.calls.filter(([url]) => Number(new URL(url as string, "http://these.test").searchParams.get("offset")) === offset);
 }
