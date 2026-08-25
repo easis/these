@@ -44,8 +44,8 @@ export function Viewer({ items, index, classificationContext, classificationEnab
   return (
     <div className="viewer" role="dialog" aria-modal="true" aria-label={media.name} aria-busy={classificationPending || nextPending}>
       <div className="viewer-bar">
-        <span className="truncate font-mono text-xs text-white/70">{media.name}</span>
-        <span className="ml-auto text-xs text-white/55">{classificationContext ?? "Classification unavailable"}</span>
+        <span className="viewer-title truncate font-mono text-xs text-white/70">{media.name}</span>
+        {classificationContext ? <span className="viewer-context-chip" title={classificationContext}>{classificationContext}</span> : null}
         <button type="button" className="viewer-button" onClick={onClose} aria-label="Close viewer"><X size={18} /></button>
       </div>
       <button type="button" className="viewer-nav left" disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label="Previous"><ChevronLeft size={28} /></button>

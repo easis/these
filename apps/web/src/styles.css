@@ -213,6 +213,8 @@ code { font-size: .9em; }
 /* Viewer: one restrained dark surface so media remains the focus. */
 .viewer { position: fixed; z-index: 50; inset: 0; display: grid; grid-template-columns: 62px 1fr 62px; grid-template-rows: 46px 1fr 58px; color: white; background: var(--viewer); }
 .viewer-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 16px; border-bottom: 1px solid rgb(255 255 255 / 10%); }
+.viewer-title { min-width: 0; flex: 1; }
+.viewer-context-chip { max-width: min(280px, 40vw); height: 24px; flex: none; display: inline-flex; align-items: center; padding: 0 8px; overflow: hidden; border: 1px solid rgb(255 255 255 / 12%); border-radius: 999px; color: rgb(255 255 255 / 78%); background: rgb(255 255 255 / 8%); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .viewer-button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 5px; color: rgb(255 255 255 / 70%); background: transparent; cursor: pointer; }
 .viewer-button:hover { color: white; background: rgb(255 255 255 / 8%); }
 .viewer-nav { grid-row: 2; display: grid; place-items: center; border: 0; color: rgb(255 255 255 / 56%); background: transparent; cursor: pointer; }
