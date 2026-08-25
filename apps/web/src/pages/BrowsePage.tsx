@@ -565,7 +565,7 @@ function applyFolderPatchToBrowse(response: BrowseResponse, folderPath: string, 
   const folders = response.folders
     .map((folder) => folder.path === folderPath ? patchFolder(folder, patch) : folder)
     .filter((folder) => (showHidden || !folder.hidden) && folderMatchesSearch(folder, searchFilter))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true }));
+    .sort(compareFolderDisplayNames);
   return { ...response, folders };
 }
 
@@ -582,8 +582,12 @@ function restoreBrowseFolder(response: BrowseResponse, folder: FolderEntry, show
     : [...response.folders, folder]
   )
     .filter((entry) => (showHidden || !entry.hidden) && folderMatchesSearch(entry, searchFilter))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true }));
+    .sort(compareFolderDisplayNames);
   return { ...response, folders };
+}
+
+function compareFolderDisplayNames(a: FolderEntry, b: FolderEntry) {
+  return a.displayName.localeCompare(b.displayName, undefined, { numeric: false });
 }
 
 function applyOptimisticState(response: BrowseResponse, folderPatches: Map<string, FolderPatch>, mediaStatuses: Map<string, ListItemStatus | null>, showHidden: boolean, searchFilter: string) {

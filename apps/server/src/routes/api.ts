@@ -81,7 +81,7 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
       })
       .filter((folder) => showHidden || !folder.hidden)
       .filter((folder) => !searchFilter || folder.name.toLowerCase().includes(searchFilter) || folder.displayName.toLowerCase().includes(searchFilter))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true }));
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: false }));
 
     const requestedKinds = parseMediaKinds(request.query.kinds);
     const mediaNames = entries
