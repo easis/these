@@ -1,95 +1,153 @@
-# *these*
+<div align="center">
+  <img src="apps/web/public/favicon.svg" width="72" height="72" alt="these logo" />
+  <h1><em>these</em></h1>
+  <p><strong>Your folders are already the library.</strong></p>
+  <p>
+    A self-hosted gallery for browsing image and video folders, building shortlists,<br />
+    and downloading the keepers — without importing, moving, or reorganizing a file.
+  </p>
+  <p>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#how-it-works">How it works</a> ·
+    <a href="#configuration">Configuration</a> ·
+    <a href="#development">Development</a>
+  </p>
+</div>
 
-*these* is a self-hosted, directory-first gallery for browsing image and video folders, making selections, and downloading those selections. It is intended for existing NAS and homelab directory structures where the filesystem must remain the source of truth.
+![The three-pane media browser in these](docs/assets/screenshots/browse.jpg)
 
-*these* does not import, move, rename, or reorganize media. The mounted directories can be read-only. Its writable data consists of SQLite metadata and a disposable thumbnail cache.
+*Demo media shown throughout this README comes from the [Images Dataset](https://www.kaggle.com/datasets/pavansanagapati/images-dataset) on Kaggle.*
 
-## Screenshots
+## What is *these*?
 
-Screenshots will be added after the first packaged release. The current application includes the home page, three-pane browser, media viewer, list review, folder metadata manager, and light/dark themes described below.
+*these* is a directory-first media gallery for NAS and homelab collections. Point it at the folders you already have and browse them as they are on disk. The filesystem remains the source of truth; *these* adds only the small amount of state needed to curate it.
+
+- **Browse lazily.** Only the folder you open is read; there is no startup scan or import pipeline.
+- **Keep originals untouched.** Media mounts can be read-only. Files are never moved, renamed, or stored in SQLite.
+- **Make useful selections.** Sort files into **Selected** and **Maybe**, review them side by side, then stream a ZIP.
+- **Tame large trees.** Give folders aliases, mark favorites, and hide branches without changing anything on disk.
+- **Stay self-hosted.** One container serves the React app, API, SQLite metadata, thumbnails, and video tooling.
+
+> [!IMPORTANT]
+> *these* is currently a single-user application with no built-in authentication. Keep it on a trusted network or place it behind your own access control.
+
+## A quick tour
+
+### Browse the filesystem, not a catalog
+
+The three-pane browser keeps folders, media, and active lists in one place. Filter the open folder by filename or media type, resize thumbnails, and classify files without leaving the gallery.
+
+### Inspect and classify without breaking your flow
+
+Open an image or video in the focused viewer, move through the folder with the arrow keys, and use `1`, `2`, or `0` to update the active list. Technical metadata is fetched only when the details panel is opened.
+
+![The focused media viewer with Selected and Maybe controls](docs/assets/screenshots/viewer.jpg)
+
+### Review the keepers
+
+Each list separates confident picks from second-pass candidates. Items can move between groups or be removed inline, and downloads stream directly from the mounted originals.
+
+![A list review with Selected and Maybe groups](docs/assets/screenshots/lists.jpg)
 
 ## How it works
 
-The server enumerates a folder only when it is opened. It does not scan the full library during startup. Directory children and media pages are loaded on demand; thumbnails are generated independently with `sharp` or `ffmpeg` and cached under `/data/cache`.
+```text
+Browser
+  └─ React + Vite
+       └─ REST API
+            └─ Fastify
+                 ├─ mounted media (read-only is fine)
+                 ├─ sharp / ffmpeg → disposable thumbnail cache
+                 └─ Drizzle ORM → SQLite metadata
+```
 
-SQLite stores only *these*-owned metadata:
+The server enumerates a directory only when it is opened. Folder children, media pages, thumbnails, and technical metadata are all loaded independently and on demand.
 
-- lists and each item's Selected or Maybe state
-- folder aliases, favorite state, and hidden state
-- the active list
+SQLite stores only *these*-owned state:
 
-Original media remains in the mounted filesystem and is never stored as a SQLite blob.
+- lists and each item's **Selected** or **Maybe** status;
+- folder aliases, favorites, and hidden flags;
+- configured media roots and the active list.
+
+Original media is read directly from the mounted filesystem and is never copied into the database. Every file access is checked both lexically and through `realpath`, preventing traversal and symlink escapes outside configured roots. See [the architecture notes](docs/ARCHITECTURE.md) for the full design.
 
 ## Quick start
 
-Copy the example Compose file and adjust its host paths:
+### Docker Compose
+
+Copy the example and replace its host paths with your own:
 
 ```sh
 cp docker-compose.example.yml docker-compose.yml
 docker compose up --build
 ```
 
-Open `http://localhost:4000`.
+Open [http://localhost:4000](http://localhost:4000), go to **Settings → Media roots**, and add the container path of each mounted library — for example `/media/photos`.
 
-Open **Settings**, then add each mounted container path as a media root, for example `Photos` at `/media/photos`.
-
-The example builds locally. For a published image, replace `build: .` and `image: these:local` with the eventual registry image name.
-
-## Mounting media
-
-Each volume maps a host directory to a container directory:
+The included Compose file builds the image locally. A minimal mount setup looks like this:
 
 ```yaml
 services:
   these:
+    build: .
+    image: these:local
+    ports:
+      - "4000:4000"
     volumes:
       - ./data:/data
       - /volume1/photos:/media/photos:ro
-      - /volume1/downloads:/media/downloads:ro
+      - /volume1/videos:/media/videos:ro
 ```
 
-In the first mapping, `/volume1/photos` is the real host directory and `/media/photos` is its stable name inside *these*. After the container starts, add `/media/photos` from **Settings → Media roots** and give it the label you want displayed in the application.
+Here `/volume1/photos` is the real host directory and `/media/photos` is its stable path inside the container. Add `/media/photos` in *these* after the service starts. The display label can be anything you like.
 
-Use absolute container paths. Commas separate roots; paths containing commas are not supported in the current configuration format.
+> [!TIP]
+> Keep media mounts read-only with `:ro`. Only `/data` needs to be writable.
 
-*these* persists media and folder references using container paths. If a later Compose change moves `/media/downloads/lisbon` to `/media/downloads/app/lisbon`, the old metadata remains and appears as Missing. Open **Folder metadata**, edit the path to the new mounted location, and save. The alias, favorite, and hidden state remain on the same internal record.
+### First-run checklist
 
-## Lists
+1. Mount one or more media directories into the container.
+2. Add their absolute **container paths** in **Settings → Media roots**.
+3. Create a list and make it active.
+4. Browse a folder and mark files **Selected** or **Maybe**.
+5. Open the list to review or download the selection as a ZIP.
 
-A list is one selection with two review states:
+## Everyday workflow
+
+### Lists
+
+A list is one independent selection with two review states:
 
 - **Selected** is the default download group.
-- **Maybe** holds files for a second pass.
+- **Maybe** keeps uncertain files ready for a second pass.
 
-Only one state can exist for a given media path within a list. Assigning Selected to a Maybe item changes its state instead of duplicating it. The same media can independently belong to several lists.
+A media path can have only one state in a list, so moving an item from Maybe to Selected never duplicates it. The same file may belong to several different lists.
 
-The active list is visible in the browser toolbar. The three-pane browser also shows list counts on the right. Opening a list separates Selected and Maybe into review galleries, where an item can change state or be removed without a dialog.
+**Download Selected** streams a ZIP directly from mounted files. Maybe and all-item downloads are also available from the list screen and API. If basenames collide, later entries become `name (2).ext`, `name (3).ext`, and so on. Missing files are skipped without deleting their saved references.
 
-**Download Selected** streams a ZIP directly from mounted files. Maybe and all-item downloads are available from the list screen/API. When two items have the same basename, *these* keeps the first and names later entries `name (2).ext`, `name (3).ext`, and so on. Missing media is omitted without deleting its list reference.
+### Folder metadata
 
-## Folder metadata
+Folder metadata changes how the tree is presented, never the directory itself:
 
-Folder metadata does not change a directory on disk.
+- an **alias** replaces the visible folder name;
+- a **favorite** adds a shortcut above the tree;
+- a **hidden** folder removes its entire subtree from normal navigation.
 
-- An **alias** replaces the visible folder name; the real path remains available as a tooltip and in the metadata manager.
-- A **favorite** adds a quick reference above the folder tree.
-- A **hidden** folder and its complete subtree disappear from normal navigation.
+Use inline actions while browsing, or open **Folders** to search and repair metadata centrally. If a mounted path changes, update the recorded path there; the alias and flags remain attached to the same internal record.
 
-Use the inline folder actions in Browse to create metadata. The central **Folder metadata** page can search paths and aliases, filter flags or Missing records, edit aliases and paths, restore hidden folders, and remove metadata. A repaired path must exist as a directory inside a configured media root. *these* rejects traversal, external absolute paths, and symlink escapes.
+### Keyboard shortcuts
 
-## Keyboard shortcuts
-
-Shortcuts apply to a focused thumbnail or the open viewer.
+Shortcuts apply to the focused thumbnail or the open viewer.
 
 | Key | Action |
 | --- | --- |
-| `Enter` or `Space` | Open the focused thumbnail |
-| `←` / `→` | Previous / next media in the viewer |
-| `1` | Mark Selected in the current list context |
-| `2` | Mark Maybe in the current list context |
-| `0` | Remove from the current list context |
-| `I` | Show or hide technical details for the open media |
-| `Esc` | Close the viewer or cancel inline alias editing |
+| `Enter` / `Space` | Open the focused thumbnail |
+| `←` / `→` | Previous / next media |
+| `1` | Mark **Selected** in the current list |
+| `2` | Mark **Maybe** in the current list |
+| `0` | Remove from the current list |
+| `I` | Show or hide technical details |
+| `Esc` | Close the viewer or cancel alias editing |
 
 ## Configuration
 
@@ -100,25 +158,33 @@ Shortcuts apply to a focused thumbnail or the open viewer.
 | `PORT` | `4000` | HTTP port |
 | `LOG_LEVEL` | `info` | Fastify log level; use `silent` for tests |
 
-There is no authentication in this version. Do not expose the service directly to the public internet. Put it behind access control if it is reachable outside a trusted network.
+### Persistent data and backups
 
-## Persistent data
+`/data/these.db` contains lists, folder metadata, roots, and application settings. SQLite also creates `these.db-wal` and `these.db-shm` while running in WAL mode.
 
-`/data/these.db` stores metadata. SQLite also creates `these.db-wal` and `these.db-shm` while running in WAL mode. `/data/cache` contains thumbnails and can be deleted while *these* is stopped; it will be rebuilt on demand.
+`/data/cache` contains disposable thumbnails. It can be deleted while *these* is stopped and will be rebuilt on demand. Back up the SQLite files if your selections and folder metadata matter; original media is not part of a *these* backup.
 
-Back up the SQLite files if lists and folder metadata matter. Original media is not part of a *these* backup.
+### Moving mounted folders
+
+*these* persists media and folder references using absolute container paths. If a Compose change moves `/media/photos/trips` to `/media/archive/trips`, old references appear as **Missing**. Open **Folders**, edit the path to the new mounted location, and save it.
+
+The repaired path must resolve to a directory inside a configured media root. Traversal, external absolute paths, and symlink escapes are rejected.
 
 ## Supported media
 
-Images: JPEG, PNG, BMP, WebP, AVIF, GIF (first frame), TIFF, HEIC, and HEIF where the installed `sharp` build can decode them.
+**Images:** JPEG, PNG, BMP, WebP, AVIF, GIF (first frame), TIFF, HEIC, and HEIF where the installed `sharp` build can decode them.
 
-Videos: MP4, MOV, M4V, WebM, MKV, and AVI. Browser playback still depends on the browser's codecs. `ffmpeg` generates video thumbnails.
+**Videos:** MP4, MOV, M4V, WebM, MKV, and AVI. Browser playback still depends on available browser codecs; `ffmpeg` generates video thumbnails.
 
-Files with other extensions do not appear in the gallery.
+Files with other extensions are ignored by the gallery.
 
 ## Development
 
-Requirements: Node.js 22 or newer, pnpm 10, and `ffmpeg`/`ffprobe` on `PATH` for video thumbnails.
+Requirements:
+
+- Node.js 22 or newer;
+- pnpm 10;
+- `ffmpeg` and `ffprobe` on `PATH` for video thumbnails and metadata.
 
 ```sh
 pnpm install
@@ -126,36 +192,34 @@ cp .env.example .env
 pnpm dev
 ```
 
-The server loads environment files from the repository root with `dotenv-flow`. In development the precedence is `.env`, `.env.local`, `.env.development`, then `.env.development.local`; variables already exported by the shell take priority over every file. Relative values such as `DATA_DIR=./data` are resolved from the repository root.
+Vite runs at [http://localhost:5173](http://localhost:5173) and proxies `/api` to Fastify on port `4000`. Add absolute local paths from **Settings** after startup.
 
-Vite runs at `http://localhost:5173` and proxies `/api` to Fastify on port 4000. Add local absolute paths from the Settings screen after startup.
+The server reads environment files from the repository root with `dotenv-flow`. In development, precedence is `.env`, `.env.local`, `.env.development`, then `.env.development.local`; already-exported shell variables win. Relative paths such as `DATA_DIR=./data` resolve from the repository root.
 
-Run the verification suite:
+Run the complete verification suite:
 
 ```sh
 pnpm check
 ```
 
-Tests cover filesystem containment, symlink escape, folder metadata repair, list state constraints, missing media, filtered pagination, request races, byte ranges, and ZIP filename collisions.
-
-## Building
-
-Build the frontend and server locally:
+Or run individual stages:
 
 ```sh
+pnpm typecheck
+pnpm test
 pnpm build
 ```
 
-Start the production build (like `next start`):
+Tests cover filesystem containment, symlink escape prevention, folder metadata repair, list state constraints, missing media, filtered pagination, request races, byte ranges, and ZIP filename collisions.
+
+### Production build
 
 ```sh
+pnpm build
 pnpm start
 ```
 
-`pnpm start` expects the application to be built already and runs the server with
-`NODE_ENV=production`.
-
-Build the single-service container:
+`pnpm start` expects an existing production build. To build the single-service container directly:
 
 ```sh
 docker build -t these:local .
@@ -163,15 +227,15 @@ docker build -t these:local .
 
 The runtime image contains Node.js, the Fastify server, the compiled React application, production dependencies, and `ffmpeg`.
 
-## Limitations
+## Current limitations
 
-- Single-user and no built-in authentication.
-- No global or fuzzy search; filename filtering applies to the open folder and folder metadata search applies to recorded folders.
+- Single-user; no built-in authentication.
+- No global or fuzzy search. Filename filtering applies to the open folder.
 - Folder moves are repaired manually rather than detected automatically.
-- Directory symlinks are not shown in the tree. Direct symlink paths are validated and cannot escape a root.
-- The list review screen loads up to 1,000 items in this version. Downloads allow a larger bounded set and stream their contents.
-- Mobile is usable for basic access but the primary layout is desktop and tablet oriented.
+- Directory symlinks are hidden; direct symlink paths cannot escape a root.
+- The list review screen loads up to 1,000 items. Downloads use a larger bounded set and stream their contents.
+- Mobile supports basic access, while the primary layout targets desktop and tablet.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).
