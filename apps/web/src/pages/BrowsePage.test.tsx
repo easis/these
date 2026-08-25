@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { BrowseResponse, TheseList } from "@these/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -346,6 +346,28 @@ describe("BrowsePage requests", () => {
     expect(await screen.findByText("Could not save the favorite.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add current folder to favorites" })).not.toBeDisabled();
     expect(screen.getByText("photo.jpg")).toBeInTheDocument();
+  });
+
+  it("hides a folder from the left sidebar optimistically and restores it on failure", async () => {
+    const update = deferred<unknown>();
+    const photos = { path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false };
+    mocks.preferences.leftSidebarOpen = true;
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/folder-metadata" && init?.method === "POST") return update.promise;
+      return Promise.resolve(browseResponse("/media", 0, { folders: [photos] }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    const sidebar = screen.getByRole("complementary", { name: "Folders" });
+    fireEvent.click(within(sidebar).getByRole("button", { name: "Expand Library" }));
+    expect(await within(sidebar).findByTitle("/media/photos")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide folder" }));
+    expect(within(sidebar).queryByTitle("/media/photos")).not.toBeInTheDocument();
+
+    await act(async () => update.reject(new Error("Could not hide the folder.")));
+    expect(await screen.findByText("Could not hide the folder.")).toBeInTheDocument();
+    expect(await within(sidebar).findByTitle("/media/photos")).toBeInTheDocument();
   });
 
   it("does not restore a failed folder mutation after navigating elsewhere", async () => {

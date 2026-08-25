@@ -10,13 +10,15 @@ interface TreeNodeProps {
   depth: number;
   currentPath: string | null;
   showHidden: boolean;
+  hiddenOverrides: ReadonlyMap<string, boolean>;
   onOpen: (path: string) => void;
 }
 
-const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden, onOpen }: TreeNodeProps) {
+const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden, hiddenOverrides, onOpen }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(currentPath?.startsWith(`${folder.path}/`) ?? false);
   const [children, setChildren] = useState<FolderEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const hidden = isEffectivelyHidden(folder.path, folder.hidden, hiddenOverrides);
 
   useEffect(() => {
     if (currentPath?.startsWith(`${folder.path}/`)) setExpanded(true);
@@ -41,7 +43,7 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
 
   return (
     <div role="treeitem" aria-expanded={expanded}>
-      <div className={`tree-row ${currentPath === folder.path ? "is-current" : ""} ${folder.hidden ? "is-hidden" : ""}`} style={{ paddingLeft: `${6 + depth * 14}px` }}>
+      <div className={`tree-row ${currentPath === folder.path ? "is-current" : ""} ${hidden ? "is-hidden" : ""}`} style={{ paddingLeft: `${6 + depth * 14}px` }}>
         <button type="button" className="tree-toggle" onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} ${folder.displayName}`}>
           <ChevronRight className={expanded ? "rotate-90" : ""} size={13} />
         </button>
@@ -53,18 +55,23 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
       {expanded ? (
         <div role="group">
           {loading ? <div className="tree-note" style={{ paddingLeft: `${28 + depth * 14}px` }}>Loading…</div> : null}
-          {children?.map((child) => <TreeNode key={child.path} folder={child} depth={depth + 1} currentPath={currentPath} showHidden={showHidden} onOpen={onOpen} />)}
+          {children?.map((child) => {
+            const childHidden = isEffectivelyHidden(child.path, child.hidden, hiddenOverrides);
+            return showHidden || !childHidden ? <TreeNode key={child.path} folder={child} depth={depth + 1} currentPath={currentPath} showHidden={showHidden} hiddenOverrides={hiddenOverrides} onOpen={onOpen} /> : null;
+          })}
         </div>
       ) : null}
     </div>
   );
 });
 
-export function FolderTree({ currentPath, onClose }: { currentPath: string | null; onClose?: () => void }) {
+const emptyHiddenOverrides = new Map<string, boolean>();
+
+export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides, onClose }: { currentPath: string | null; hiddenOverrides?: ReadonlyMap<string, boolean>; onClose?: () => void }) {
   const { bootstrap, preferences } = useApp();
   const navigate = useNavigate();
   const open = useCallback((folderPath: string) => navigate(`/browse?${query({ path: folderPath })}`), [navigate]);
-  const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !favorite.hidden)) ?? [];
+  const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides))) ?? [];
   return (
     <aside className="side-panel left-panel" aria-label="Folders">
       <div className="panel-heading"><span>Folders</span>{onClose ? <button className="icon-button panel-close" type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
@@ -72,7 +79,7 @@ export function FolderTree({ currentPath, onClose }: { currentPath: string | nul
         <section className="border-b border-default pb-2">
           <h2 className="panel-section-label"><FolderHeart size={12} /> Favorites</h2>
           {visibleFavorites.map((favorite) => (
-            <button className={`favorite-row ${favorite.hidden ? "is-hidden" : ""}`} type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
+            <button className={`favorite-row ${isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides) ? "is-hidden" : ""}`} type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
               <span className="truncate">{favorite.alias ?? favorite.path.split("/").pop()}</span>
             </button>
           ))}
@@ -81,11 +88,27 @@ export function FolderTree({ currentPath, onClose }: { currentPath: string | nul
       <div className="min-h-0 flex-1 overflow-y-auto py-1" role="tree" aria-label="Media roots">
         {bootstrap?.roots.map((root) => {
           const folder: FolderEntry = { path: root.path, name: root.label, displayName: root.label, hidden: false, favorite: false };
-          return root.available ? <TreeNode key={root.id} folder={folder} depth={0} currentPath={currentPath} showHidden={preferences.showHidden} onOpen={open} /> : (
+          return root.available ? <TreeNode key={root.id} folder={folder} depth={0} currentPath={currentPath} showHidden={preferences.showHidden} hiddenOverrides={hiddenOverrides} onOpen={open} /> : (
             <div key={root.id} className="tree-row opacity-50" title={`${root.path} is unavailable`}><HardDrive size={14} /><span className="truncate">{root.label}</span></div>
           );
         })}
       </div>
     </aside>
   );
+}
+
+function isEffectivelyHidden(folderPath: string, fallback: boolean, overrides: ReadonlyMap<string, boolean>) {
+  let exactOverride: boolean | undefined;
+  for (const [overridePath, hidden] of overrides) {
+    if (!isSameOrDescendantPath(folderPath, overridePath)) continue;
+    if (hidden) return true;
+    if (folderPath === overridePath) exactOverride = false;
+  }
+  return exactOverride ?? fallback;
+}
+
+function isSameOrDescendantPath(folderPath: string, ancestorPath: string) {
+  if (folderPath === ancestorPath) return true;
+  if (ancestorPath.endsWith("/") || ancestorPath.endsWith("\\")) return folderPath.startsWith(ancestorPath);
+  return folderPath.startsWith(`${ancestorPath}/`) || folderPath.startsWith(`${ancestorPath}\\`);
 }
