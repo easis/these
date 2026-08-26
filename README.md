@@ -121,6 +121,12 @@ docker compose up -d
 
 *these* includes a web app manifest and service worker, so supported browsers can install it from their native install menu. The installed app opens in its own standalone window.
 
+<p align="center">
+  <img src="docs/assets/screenshots/mobile-browse.jpg" width="390" alt="Browsing a media folder in these on a mobile viewport" />
+</p>
+
+*The responsive media browser at a 390 × 844 mobile viewport.*
+
 The service worker caches only the application shell: HTML, JavaScript, CSS, and icons. API responses, thumbnails, original media, and list changes still require a connection to the *these* server and are not stored for offline use. If the server is unavailable, the cached shell shows a retryable connection screen and refreshes automatically when the browser comes back online.
 
 Service workers require a secure browser context. Plain HTTP works on `localhost` for development, but access from another computer or phone should use HTTPS through a reverse proxy such as Caddy, Traefik, or nginx. The *these* container continues to serve HTTP internally; TLS termination and certificates stay with the proxy.
