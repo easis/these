@@ -7,12 +7,24 @@
     and downloading the keepers — without importing, moving, or reorganizing a file.
   </p>
   <p>
+    <img src="https://img.shields.io/badge/status-experimental-orange" alt="Project status: experimental" />
+    <a href="https://developers.openai.com/codex/">
+      <img src="https://img.shields.io/badge/developed%20with-OpenAI%20Codex-000000?logo=openai" alt="Developed with OpenAI Codex" />
+    </a>
+  </p>
+  <p>
     <a href="#quick-start">Quick start</a> ·
     <a href="#how-it-works">How it works</a> ·
     <a href="#configuration">Configuration</a> ·
     <a href="#development">Development</a>
   </p>
 </div>
+
+> [!WARNING]
+> **Experimental software:** *these* is under active development and is not yet considered stable. Expect frequent breaking changes to features, configuration, APIs, and stored metadata. Review release notes and back up `/data` before updating.
+
+> [!NOTE]
+> **AI disclosure:** *these* is being developed with [OpenAI Codex](https://developers.openai.com/codex/). Code, tests, documentation, and other project assets may include AI-generated or AI-assisted contributions.
 
 ![The three-pane media browser in these](docs/assets/screenshots/browse.jpg)
 
