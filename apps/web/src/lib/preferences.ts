@@ -6,6 +6,7 @@ export interface LocalPreferences {
   leftSidebarOpen: boolean;
   leftSidebarWidth: number;
   rightSidebarOpen: boolean;
+  rightSidebarWidth: number;
   showHidden: boolean;
   lastFolder: string | null;
 }
@@ -18,6 +19,25 @@ export const folderSidebarWidth = {
   viewportRatio: 0.42,
   keyboardStep: 16,
 } as const;
+export const listSidebarWidth = {
+  default: 208,
+  min: 180,
+  max: 480,
+  viewportRatio: 0.42,
+  keyboardStep: 16,
+} as const;
+export const browserSidebarLayout = {
+  overlayBreakpoint: 980,
+  minimumContentWidth: 480,
+} as const;
+
+export interface SidebarWidthConfig {
+  default: number;
+  min: number;
+  max: number;
+  viewportRatio: number;
+  keyboardStep: number;
+}
 
 export const defaultPreferences: LocalPreferences = {
   theme: "system",
@@ -25,6 +45,7 @@ export const defaultPreferences: LocalPreferences = {
   leftSidebarOpen: true,
   leftSidebarWidth: folderSidebarWidth.default,
   rightSidebarOpen: true,
+  rightSidebarWidth: listSidebarWidth.default,
   showHidden: false,
   lastFolder: null,
 };
@@ -35,17 +56,18 @@ export function readPreferences(): LocalPreferences {
     return {
       ...defaultPreferences,
       ...stored,
-      leftSidebarWidth: clampFolderSidebarWidth(stored.leftSidebarWidth),
+      leftSidebarWidth: clampSidebarWidth(stored.leftSidebarWidth, folderSidebarWidth),
+      rightSidebarWidth: clampSidebarWidth(stored.rightSidebarWidth, listSidebarWidth),
     };
   } catch {
     return defaultPreferences;
   }
 }
 
-export function clampFolderSidebarWidth(value: unknown, maximum: number = folderSidebarWidth.max) {
-  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : folderSidebarWidth.default;
-  const cappedMaximum = Math.max(folderSidebarWidth.min, Math.min(maximum, folderSidebarWidth.max));
-  return Math.round(Math.max(folderSidebarWidth.min, Math.min(numericValue, cappedMaximum)));
+export function clampSidebarWidth(value: unknown, config: SidebarWidthConfig, maximum: number = config.max) {
+  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : config.default;
+  const cappedMaximum = Math.max(config.min, Math.min(maximum, config.max));
+  return Math.round(Math.max(config.min, Math.min(numericValue, cappedMaximum)));
 }
 
 export function writePreferences(value: LocalPreferences) {

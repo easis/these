@@ -7,6 +7,7 @@ import { FolderTree } from "./FolderTree";
 const mocks = vi.hoisted(() => ({
   api: vi.fn(),
   leftSidebarWidth: 300,
+  rightSidebarOpen: true,
   setPreferences: vi.fn(),
   showHidden: false,
   favorites: [] as Array<{ id: number; path: string; alias: string | null; favorite: boolean; hidden: boolean; status: "ok"; createdAt: string; updatedAt: string }>,
@@ -23,7 +24,7 @@ vi.mock("../state/app-context", () => ({
       roots: [{ id: "library", label: "Library", path: "/media", available: true }],
       favorites: mocks.favorites,
     },
-    preferences: { leftSidebarWidth: mocks.leftSidebarWidth, showHidden: mocks.showHidden },
+    preferences: { leftSidebarWidth: mocks.leftSidebarWidth, rightSidebarOpen: mocks.rightSidebarOpen, showHidden: mocks.showHidden },
     setPreferences: mocks.setPreferences,
   }),
 }));
@@ -32,6 +33,7 @@ describe("FolderTree", () => {
   beforeEach(() => {
     mocks.api.mockReset();
     mocks.leftSidebarWidth = 300;
+    mocks.rightSidebarOpen = true;
     mocks.setPreferences.mockReset();
     mocks.showHidden = false;
     mocks.favorites = [];
@@ -111,9 +113,9 @@ describe("FolderTree", () => {
 
     const sidebar = screen.getByRole("complementary", { name: "Folders" });
     const resize = screen.getByRole("separator", { name: "Resize folder sidebar" });
-    expect(sidebar.style.getPropertyValue("--folder-sidebar-width")).toBe("300px");
+    expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("300px");
     expect(resize).toHaveAttribute("aria-valuemin", "220");
-    expect(resize).toHaveAttribute("aria-valuemax", "480");
+    expect(resize).toHaveAttribute("aria-valuemax", "400");
     expect(resize).toHaveAttribute("aria-valuenow", "300");
 
     fireEvent.keyDown(resize, { key: "ArrowRight" });
@@ -124,7 +126,7 @@ describe("FolderTree", () => {
     expect(mocks.setPreferences).toHaveBeenLastCalledWith({ leftSidebarWidth: 220 });
 
     fireEvent.keyDown(resize, { key: "End" });
-    expect(mocks.setPreferences).toHaveBeenLastCalledWith({ leftSidebarWidth: 480 });
+    expect(mocks.setPreferences).toHaveBeenLastCalledWith({ leftSidebarWidth: 400 });
   });
 
   it("resizes with the pointer and preserves the transient width across rerenders", () => {
@@ -149,7 +151,7 @@ describe("FolderTree", () => {
 
     const sidebar = screen.getByRole("complementary", { name: "Folders" });
     const resize = screen.getByRole("separator", { name: "Resize folder sidebar" });
-    expect(sidebar.style.getPropertyValue("--folder-sidebar-width")).toBe("336px");
+    expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("336px");
     expect(resize).toHaveAttribute("aria-valuemax", "336");
     expect(resize).toHaveAttribute("aria-valuenow", "336");
   });
