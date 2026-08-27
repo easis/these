@@ -1,15 +1,19 @@
 import { Check, CircleHelp, PanelRightClose, Plus, Settings2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
+import { listSidebarWidth } from "../lib/preferences";
 import { useApp } from "../state/app-context";
 import { TextInputDialog } from "./TextInputDialog";
+import { useSidebarResize } from "./useSidebarResize";
 
 export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?: () => void; onSelection?: () => void; modal?: boolean }) {
-  const { bootstrap, activeList, setActiveList, createList } = useApp();
+  const { bootstrap, activeList, preferences, setActiveList, createList, setPreferences } = useApp();
   const [creating, setCreating] = useState(false);
   const [activating, setActivating] = useState(false);
   const activatingRef = useRef(false);
   const [activationError, setActivationError] = useState<string | null>(null);
+  const commitWidth = useCallback((rightSidebarWidth: number) => setPreferences({ rightSidebarWidth }), [setPreferences]);
+  const resize = useSidebarResize({ storedWidth: preferences.rightSidebarWidth, config: listSidebarWidth, edge: "left", reserveForOppositeSidebar: preferences.leftSidebarOpen, onCommit: commitWidth });
   const activate = async (id: number | null) => {
     if (activatingRef.current) return;
     activatingRef.current = true;
@@ -26,7 +30,7 @@ export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?:
     }
   };
   return (
-    <aside id="list-sidebar" className="side-panel right-panel" role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Lists" aria-busy={activating} tabIndex={modal ? -1 : undefined}>
+    <aside ref={resize.sidebarRef} id="list-sidebar" className="side-panel right-panel" role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Lists" aria-busy={activating} tabIndex={modal ? -1 : undefined} style={{ "--sidebar-width": `${resize.renderedWidth}px` } as CSSProperties}>
       <div className="panel-heading">
         <span>Lists</span>
         <span className="panel-heading-actions">
@@ -56,6 +60,7 @@ export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?:
           );
         }) : <p className="empty-compact">No lists yet.<br />Create one to start selecting.</p>}
       </div>
+      {!modal ? <div ref={resize.separatorRef} className="sidebar-resizer list-sidebar-resizer" role="separator" aria-label="Resize list sidebar" aria-orientation="vertical" aria-valuemin={listSidebarWidth.min} aria-valuemax={resize.maximumWidth} aria-valuenow={resize.renderedWidth} aria-valuetext={`${resize.renderedWidth} pixels`} tabIndex={0} title="Resize lists" onPointerDown={resize.startResize} onPointerMove={resize.continueResize} onPointerUp={resize.endResize} onPointerCancel={resize.cancelResize} onKeyDown={resize.resizeWithKeyboard} /> : null}
     </aside>
   );
 }
