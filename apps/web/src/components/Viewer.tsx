@@ -1,8 +1,9 @@
-import { Check, ChevronLeft, ChevronRight, CircleHelp, Info, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CircleHelp, Download, Info, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ListItemStatus, MediaEntry, MediaMetadataResponse } from "@these/shared";
 import { api, isAbortError, query } from "../lib/api";
 import { cx } from "../lib/cx";
+import { startMediaDownload } from "../lib/downloads";
 import { MediaDetailsPanel } from "./MediaDetailsPanel";
 import styles from "./Viewer.module.css";
 
@@ -92,6 +93,7 @@ export function Viewer({ items, index, classificationContext, classificationEnab
       <div className={styles.viewerBar}>
         <span className={cx(styles.viewerTitle, "truncate font-mono text-xs text-white/70")}>{media.name}</span>
         {classificationContext ? <span className={styles.contextChip} title={classificationContext}>{classificationContext}</span> : null}
+        <button type="button" className={styles.viewerButton} onClick={() => startMediaDownload(media.path, media.name)} aria-label={`Download ${media.name}`} title="Download original"><Download size={18} /></button>
         <button type="button" className={cx(styles.viewerButton, detailsOpen && styles.buttonActive)} onClick={() => setDetailsOpen((current) => !current)} aria-label={detailsOpen ? "Hide details" : "Show details"} aria-expanded={detailsOpen} aria-controls="viewer-details" title="Details (I)"><Info size={18} /></button>
         <button type="button" className={styles.viewerButton} onClick={onClose} aria-label="Close viewer"><X size={18} /></button>
       </div>
@@ -109,9 +111,8 @@ export function Viewer({ items, index, classificationContext, classificationEnab
         onRetry={() => setRetryVersion((value) => value + 1)}
       /> : null}
       <div className={styles.viewerClassify}>
-        <button disabled={!classificationEnabled || classificationPending} className={media.status === "selected" ? styles.selected : undefined} type="button" onClick={() => onStatus("selected")}><kbd>1</kbd><Check size={15} /> Selected</button>
-        <button disabled={!classificationEnabled || classificationPending} className={media.status === "maybe" ? styles.maybe : undefined} type="button" onClick={() => onStatus("maybe")}><kbd>2</kbd><CircleHelp size={15} /> Maybe</button>
-        <button disabled={!classificationEnabled || classificationPending || !media.status} type="button" onClick={() => onStatus(null)}><kbd>0</kbd><X size={15} /> Remove</button>
+        <button disabled={!classificationEnabled || classificationPending} className={media.status === "selected" ? styles.selected : undefined} type="button" aria-pressed={media.status === "selected"} aria-label={media.status === "selected" ? "Remove selected status" : "Mark selected"} onClick={() => onStatus(media.status === "selected" ? null : "selected")}><kbd>1</kbd><Check size={15} /> Selected</button>
+        <button disabled={!classificationEnabled || classificationPending} className={media.status === "maybe" ? styles.maybe : undefined} type="button" aria-pressed={media.status === "maybe"} aria-label={media.status === "maybe" ? "Remove maybe status" : "Mark maybe"} onClick={() => onStatus(media.status === "maybe" ? null : "maybe")}><kbd>2</kbd><CircleHelp size={15} /> Maybe</button>
       </div>
     </div>
   );

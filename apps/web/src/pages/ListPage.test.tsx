@@ -53,7 +53,7 @@ describe("ListPage viewer", () => {
     const viewer = screen.getByRole("dialog", { name: "reviewed.jpg" });
     expect(within(viewer).getByText("Reviewed delivery")).toBeInTheDocument();
     expect(within(viewer).queryByText(/Different active list/)).not.toBeInTheDocument();
-    fireEvent.click(within(viewer).getByRole("button", { name: /Maybe/ }));
+    fireEvent.click(within(viewer).getByRole("button", { name: "Mark maybe" }));
 
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/lists/7/items", expect.objectContaining({
       method: "PUT",
@@ -85,6 +85,20 @@ describe("ListPage viewer", () => {
       body: JSON.stringify({ name: "Final delivery" }),
     }));
     expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it("removes a reviewed item through its active Selected button", async () => {
+    render(
+      <MemoryRouter initialEntries={["/lists/7"]}>
+        <Routes><Route path="/lists/:id" element={<ListPage />} /></Routes>
+      </MemoryRouter>,
+    );
+    const reviewedTile = (await screen.findByRole("button", { name: "Open reviewed.jpg" })).closest("article")!;
+    expect(within(reviewedTile).queryByRole("button", { name: "Remove from active list" })).not.toBeInTheDocument();
+    fireEvent.click(within(reviewedTile).getByRole("button", { name: "Remove selected status" }));
+
+    await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/lists/7/items?path=%2Fmedia%2Freviewed.jpg", { method: "DELETE" }));
+    expect(screen.getByText("No selected media.")).toBeInTheDocument();
   });
 
   it("uses the shorter Active label and disables empty downloads", async () => {

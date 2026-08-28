@@ -1,7 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import type { ListItemStatus, MediaKind, TheseList } from "@these/shared";
+import type { FolderCollection, ListItemStatus, MediaKind, TheseList } from "@these/shared";
 import type { TheseDatabase } from "../db/index.js";
-import { folderMetadata, listItems, lists, settings } from "../db/schema.js";
+import { folderCollectionItems, folderCollections, folderMetadata, listItems, lists, settings } from "../db/schema.js";
 import { AppError } from "../lib/errors.js";
 
 export class Repository {
@@ -142,6 +142,110 @@ export class Repository {
   async deleteFolderMetadata(id: number) {
     await this.db.delete(folderMetadata).where(eq(folderMetadata.id, id));
   }
+
+  async getCollections(): Promise<FolderCollection[]> {
+    const rows = (await this.db.select().from(folderCollections))
+      .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: false }) || left.id - right.id);
+    const counts = await this.db
+      .select({ collectionId: folderCollectionItems.collectionId, count: sql<number>`count(*)` })
+      .from(folderCollectionItems)
+      .groupBy(folderCollectionItems.collectionId);
+    const countByCollection = new Map(counts.map((row) => [row.collectionId, Number(row.count)]));
+    return rows.map(({ nameKey: _, ...row }) => ({ ...row, folderCount: countByCollection.get(row.id) ?? 0 }));
+  }
+
+  async getCollection(id: number): Promise<FolderCollection> {
+    const collection = (await this.getCollections()).find((candidate) => candidate.id === id);
+    if (!collection) throw new AppError("Collection not found.", 404, "COLLECTION_NOT_FOUND");
+    return collection;
+  }
+
+  async createCollection(name: string): Promise<FolderCollection> {
+    const normalized = normalizeCollectionName(name);
+    await this.assertCollectionNameAvailable(normalized.key);
+    try {
+      const [created] = await this.db.insert(folderCollections).values({ name: normalized.name, nameKey: normalized.key }).returning();
+      return { ...withoutNameKey(created!), folderCount: 0 };
+    } catch (error) {
+      throwCollectionNameConflict(error);
+    }
+  }
+
+  async renameCollection(id: number, name: string): Promise<FolderCollection> {
+    const normalized = normalizeCollectionName(name);
+    await this.assertCollectionNameAvailable(normalized.key, id);
+    try {
+      const [updated] = await this.db
+        .update(folderCollections)
+        .set({ name: normalized.name, nameKey: normalized.key, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(folderCollections.id, id))
+        .returning();
+      if (!updated) throw new AppError("Collection not found.", 404, "COLLECTION_NOT_FOUND");
+      return { ...withoutNameKey(updated), folderCount: (await this.getCollection(id)).folderCount };
+    } catch (error) {
+      throwCollectionNameConflict(error);
+    }
+  }
+
+  async deleteCollection(id: number) {
+    const deleted = await this.db.delete(folderCollections).where(eq(folderCollections.id, id)).returning({ id: folderCollections.id });
+    if (deleted.length === 0) throw new AppError("Collection not found.", 404, "COLLECTION_NOT_FOUND");
+  }
+
+  async getCollectionFolderPaths(id: number): Promise<string[]> {
+    await this.getCollection(id);
+    const rows = await this.db
+      .select({ path: folderCollectionItems.folderPath })
+      .from(folderCollectionItems)
+      .where(eq(folderCollectionItems.collectionId, id));
+    return rows.map((row) => row.path);
+  }
+
+  async getAllCollectionFolderPaths(): Promise<string[]> {
+    const rows = await this.db.selectDistinct({ path: folderCollectionItems.folderPath }).from(folderCollectionItems);
+    return rows.map((row) => row.path);
+  }
+
+  async getFolderCollectionIds(folderPath: string): Promise<number[]> {
+    const rows = await this.db
+      .select({ collectionId: folderCollectionItems.collectionId })
+      .from(folderCollectionItems)
+      .where(eq(folderCollectionItems.folderPath, folderPath));
+    return rows.map((row) => row.collectionId);
+  }
+
+  setFolderCollections(folderPath: string, collectionIds: number[]) {
+    const uniqueIds = [...new Set(collectionIds)];
+    this.db.transaction((tx) => {
+      const existing = uniqueIds.length === 0
+        ? []
+        : tx.select({ id: folderCollections.id }).from(folderCollections).where(inArray(folderCollections.id, uniqueIds)).all();
+      if (existing.length !== uniqueIds.length) throw new AppError("Collection not found.", 404, "COLLECTION_NOT_FOUND");
+      tx.delete(folderCollectionItems).where(eq(folderCollectionItems.folderPath, folderPath)).run();
+      if (uniqueIds.length > 0) {
+        tx.insert(folderCollectionItems).values(uniqueIds.map((collectionId) => ({ collectionId, folderPath }))).run();
+      }
+    });
+  }
+
+  async addCollectionFolder(id: number, folderPath: string) {
+    await this.getCollection(id);
+    await this.db.insert(folderCollectionItems).values({ collectionId: id, folderPath }).onConflictDoNothing().run();
+  }
+
+  async removeCollectionFolder(id: number, folderPath: string) {
+    await this.db.delete(folderCollectionItems).where(and(eq(folderCollectionItems.collectionId, id), eq(folderCollectionItems.folderPath, folderPath)));
+  }
+
+  async deleteCollectionFoldersByPath(paths: string[]) {
+    if (paths.length === 0) return;
+    await this.db.delete(folderCollectionItems).where(inArray(folderCollectionItems.folderPath, paths));
+  }
+
+  private async assertCollectionNameAvailable(nameKey: string, excludedId?: number) {
+    const row = await this.db.select({ id: folderCollections.id }).from(folderCollections).where(eq(folderCollections.nameKey, nameKey)).get();
+    if (row && row.id !== excludedId) throw new AppError("A collection with that name already exists.", 409, "COLLECTION_NAME_TAKEN");
+  }
 }
 
 function normalizeAlias(value: string | null | undefined) {
@@ -149,4 +253,23 @@ function normalizeAlias(value: string | null | undefined) {
   const alias = value.trim();
   if (alias.length > 160) throw new AppError("Folder alias cannot exceed 160 characters.");
   return alias || null;
+}
+
+function normalizeCollectionName(value: string) {
+  const name = value.trim();
+  if (!name || name.length > 100) throw new AppError("Collection name must contain 1 to 100 characters.");
+  return { name, key: name.toLowerCase() };
+}
+
+function withoutNameKey<T extends { nameKey: string }>(row: T): Omit<T, "nameKey"> {
+  const { nameKey: _, ...result } = row;
+  return result;
+}
+
+function throwCollectionNameConflict(error: unknown): never {
+  if ((error as { code?: string; message?: string }).code === "SQLITE_CONSTRAINT_UNIQUE"
+    && (error as { message?: string }).message?.includes("folder_collections.name_key")) {
+    throw new AppError("A collection with that name already exists.", 409, "COLLECTION_NAME_TAKEN");
+  }
+  throw error;
 }

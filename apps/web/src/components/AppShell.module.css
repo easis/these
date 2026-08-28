@@ -20,7 +20,7 @@
 @media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
   .appHeader { height: calc(46px + env(safe-area-inset-top)); gap: 8px; padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); }
   .mainNavigation { display: none; }
-  .mobileNavigation { z-index: 30; min-height: calc(58px + env(safe-area-inset-bottom)); flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 4px max(8px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 -8px 24px rgb(0 0 0 / 5%); }
+  .mobileNavigation { z-index: 30; min-height: calc(58px + env(safe-area-inset-bottom)); flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 4px max(8px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 -8px 24px rgb(0 0 0 / 5%); }
   .mobileNavigation .navLink { position: relative; min-width: 0; height: 50px; flex-direction: column; justify-content: center; gap: 2px; padding: 5px 3px 3px; border-radius: 7px; font-size: var(--font-ui-xs); font-weight: 650; }
   .mobileNavigation .navLink::before { position: absolute; top: 4px; left: 50%; width: 12px; height: 2px; border-radius: 1px; background: transparent; content: ""; transform: translateX(-50%) skewX(-28deg); }
   .mobileNavigation .navLinkActive { color: var(--accent); background: var(--accent-soft); }

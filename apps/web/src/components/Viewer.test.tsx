@@ -4,15 +4,44 @@ import type { MediaEntry, MediaMetadataResponse } from "@these/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Viewer } from "./Viewer";
 
-const mocks = vi.hoisted(() => ({ api: vi.fn() }));
+const mocks = vi.hoisted(() => ({ api: vi.fn(), startMediaDownload: vi.fn() }));
 
 vi.mock("../lib/api", async () => ({
   ...await vi.importActual<typeof import("../lib/api")>("../lib/api"),
   api: mocks.api,
 }));
 
+vi.mock("../lib/downloads", () => ({ startMediaDownload: mocks.startMediaDownload }));
+
 describe("Viewer technical details", () => {
-  beforeEach(() => mocks.api.mockReset());
+  beforeEach(() => {
+    mocks.api.mockReset();
+    mocks.startMediaDownload.mockReset();
+  });
+
+  it("downloads the original before the details control", () => {
+    render(<ViewerHarness />);
+    const viewer = screen.getByRole("dialog", { name: "first.jpg" });
+    const download = within(viewer).getByRole("button", { name: "Download first.jpg" });
+    const details = within(viewer).getByRole("button", { name: "Show details" });
+    expect(download.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(download);
+    expect(mocks.startMediaDownload).toHaveBeenCalledWith("/media/album/first.jpg", "first.jpg");
+    expect(mocks.api).not.toHaveBeenCalled();
+  });
+
+  it("toggles the active classification without a separate Remove button", () => {
+    render(<ClassificationHarness />);
+    const selected = screen.getByRole("button", { name: "Remove selected status" });
+    expect(selected).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /^Remove$/ })).not.toBeInTheDocument();
+
+    fireEvent.click(selected);
+    expect(screen.getByRole("button", { name: "Mark selected" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.keyDown(window, { key: "1" });
+    expect(screen.getByRole("button", { name: "Remove selected status" })).toBeInTheDocument();
+  });
 
   it("loads details only after opening the panel and renders the curated metadata", async () => {
     mocks.api.mockResolvedValue(imageMetadata("first.jpg", { location: { latitude: 40.416775, longitude: -3.70379, altitudeMeters: 667 } }));
@@ -101,6 +130,19 @@ function ViewerHarness() {
     onIndex={setIndex}
     onClose={() => undefined}
     onStatus={() => undefined}
+  />;
+}
+
+function ClassificationHarness() {
+  const [status, setStatus] = useState<MediaEntry["status"]>("selected");
+  return <Viewer
+    items={[{ ...mediaEntry("first.jpg"), status }]}
+    index={0}
+    classificationContext="List: Review"
+    classificationEnabled
+    onIndex={() => undefined}
+    onClose={() => undefined}
+    onStatus={setStatus}
   />;
 }
 

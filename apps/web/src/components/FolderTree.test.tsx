@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { BrowseResponse } from "@these/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -107,6 +107,31 @@ describe("FolderTree", () => {
 
     fireEvent.click(screen.getByTitle("/media"));
     expect(onNavigate).toHaveBeenCalledOnce();
+  });
+
+  it("offers one contextual action menu for folders in the sidebar", async () => {
+    mocks.api.mockResolvedValue(treeResponse("Photos", "/media/photos"));
+    const onUpdateFolder = vi.fn().mockResolvedValue(true);
+    const onEditAlias = vi.fn();
+    const onEditCollections = vi.fn();
+    render(<FolderTree currentPath="/media/current" onUpdateFolder={onUpdateFolder} onEditAlias={onEditAlias} onEditCollections={onEditCollections} />, { wrapper: MemoryRouter });
+
+    const childTrigger = await screen.findByRole("button", { name: "Folder actions for Photos" });
+    fireEvent.click(childTrigger);
+    const childMenu = screen.getByRole("menu", { name: "Photos actions" });
+    expect(within(childMenu).getByRole("menuitem", { name: "Create alias" })).toBeInTheDocument();
+    expect(within(childMenu).getByRole("menuitem", { name: "Add to collections" })).toBeInTheDocument();
+    fireEvent.click(within(childMenu).getByRole("menuitemcheckbox", { name: "Favorite" }));
+
+    await waitFor(() => expect(onUpdateFolder).toHaveBeenCalledWith(expect.objectContaining({ path: "/media/photos" }), { favorite: true }));
+    fireEvent.click(childTrigger);
+    expect(screen.getByRole("menuitemcheckbox", { name: "Remove favorite" })).toBeInTheDocument();
+
+    const rootTrigger = screen.getByRole("button", { name: "Folder actions for Library" });
+    fireEvent.click(rootTrigger);
+    expect(screen.queryByRole("menu", { name: "Photos actions" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menu", { name: "Library actions" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemcheckbox", { name: "Hide folder" })).toBeDisabled();
   });
 
   it("exposes an accessible desktop separator and resizes with the keyboard", () => {

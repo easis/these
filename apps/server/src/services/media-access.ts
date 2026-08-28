@@ -35,15 +35,20 @@ export class MediaAccess {
     let canonicalPath: string;
     try {
       canonicalPath = await realpath(reference.requestedPath);
-    } catch {
-      throw new AppError("The requested path is no longer available.", 404, "PATH_MISSING");
+    } catch (error) {
+      throw pathAccessError(error);
     }
     if (!isContained(reference.root.canonicalPath, canonicalPath)) {
       throw new AppError("Resolved path escapes the configured media root.", 403, "SYMLINK_ESCAPE");
     }
-    const stats = await lstat(canonicalPath);
-    if (expected === "file" && !stats.isFile()) throw new AppError("The requested path is not a file.");
-    if (expected === "directory" && !stats.isDirectory()) throw new AppError("The requested path is not a folder.");
+    let stats;
+    try {
+      stats = await lstat(canonicalPath);
+    } catch (error) {
+      throw pathAccessError(error);
+    }
+    if (expected === "file" && !stats.isFile()) throw new AppError("The requested path is not a file.", 400, "PATH_TYPE_MISMATCH");
+    if (expected === "directory" && !stats.isDirectory()) throw new AppError("The requested path is not a folder.", 400, "PATH_TYPE_MISMATCH");
     return { ...reference, canonicalPath };
   }
 
@@ -55,4 +60,12 @@ export class MediaAccess {
       return false;
     }
   }
+}
+
+function pathAccessError(error: unknown): AppError {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return new AppError("The requested path is no longer available.", 404, "PATH_MISSING");
+  }
+  return new AppError("The requested path is temporarily unavailable.", 503, "PATH_UNAVAILABLE");
 }

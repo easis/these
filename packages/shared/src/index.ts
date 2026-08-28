@@ -171,6 +171,27 @@ export interface FolderMetadata {
   updatedAt: string;
 }
 
+export interface FolderCollection {
+  id: number;
+  name: string;
+  folderCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CollectionFolder {
+  path: string;
+  name: string;
+  displayName: string;
+  hidden: boolean;
+  favorite: boolean;
+  status: "ready" | "root-unavailable" | "unavailable";
+}
+
+export interface FolderCollectionDetail extends FolderCollection {
+  folders: CollectionFolder[];
+}
+
 export interface BootstrapResponse {
   roots: MediaRoot[];
   lists: TheseList[];

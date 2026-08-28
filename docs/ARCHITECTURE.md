@@ -34,9 +34,11 @@ Technical metadata is also lazy. Opening the viewer does not inspect the source 
 
 ## Persistence
 
-SQLite contains four small models:
+SQLite contains six small models:
 
 - `folder_metadata`: stable id, editable path, alias, favorite and hidden flags.
+- `folder_collections`: case-insensitively unique collection names and timestamps.
+- `folder_collection_items`: a unique `(collection_id, folder_path)` membership; the same path may appear in several collections.
 - `lists`: named selections.
 - `list_items`: a unique `(list_id, media_path)` pair with `selected` or `maybe` status.
 - `settings`: server-side single-user state, including the active list id and media-root configuration.
@@ -44,6 +46,8 @@ SQLite contains four small models:
 Theme, thumbnail size, collapsed sidebars, last folder and temporary hidden-folder visibility stay in versioned browser local storage. They affect one browser only and do not need database coordination.
 
 Media roots are added, edited and removed from the Settings screen. Their labels and absolute container paths are persisted as JSON in the existing `settings` table, while availability and canonical paths are resolved from the filesystem at server startup or whenever a root is changed.
+
+Collection reads refresh root availability before checking memberships. A member is retained when its containing root or the individual folder is temporarily inaccessible, but removed transactionally when the root is available and the directory is definitively missing or no longer resolves safely. Paths outside the current roots and symlink escapes are also removed. Adding or replacing memberships accepts only currently resolvable directories, and replacing a folder's complete collection set is atomic.
 
 SQL migrations live in `apps/server/drizzle`. The server applies unapplied files transactionally at startup and records them in `_these_migrations`.
 

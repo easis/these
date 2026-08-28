@@ -4,7 +4,7 @@
 .rootNotice { min-height: 42px; display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 34px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-secondary); font-size: var(--font-ui-lg); }
 .warning { align-items: flex-start; flex-direction: column; border-color: color-mix(in srgb, var(--maybe) 42%, var(--border)); background: var(--maybe-soft); }
 .rootNotice pre { width: 100%; margin: 2px 0 0; padding: 7px; overflow-x: auto; border-radius: 4px; background: color-mix(in srgb, var(--surface) 65%, transparent); font-size: var(--font-ui-sm); }
-.homeActions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 28px; }
+.homeActions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 28px; }
 .homeAction { min-height: 106px; display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 7px; color: var(--text-primary); background: var(--surface); text-decoration: none; }
 .homeAction > svg:first-child { color: var(--accent); }
 .homeAction > svg:last-child { grid-column: 2; color: var(--text-muted); }

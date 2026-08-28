@@ -78,6 +78,7 @@ The server enumerates a directory only when it is opened. Folder children, media
 SQLite stores only *these*-owned state:
 
 - lists and each item's **Selected** or **Maybe** status;
+- named folder collections and their many-to-many memberships;
 - folder aliases, favorites, and hidden flags;
 - configured media roots and the active list.
 
@@ -169,6 +170,12 @@ Folder metadata changes how the tree is presented, never the directory itself:
 
 Use inline actions while browsing, or open **Folders** to search and repair metadata centrally. If a mounted path changes, update the recorded path there; the alias and flags remain attached to the same internal record.
 
+### Folder collections
+
+A collection groups related folders without moving or copying their contents. Open **Collections** to create and manage groups, or use **Add to collections** on the current folder or any child folder while browsing. One folder can belong to several collections.
+
+Opening a collection shows its member folders as shortcuts into the regular browser. Members are sorted by their visible alias or folder name. If an entire media root or an individual folder is temporarily inaccessible, its memberships are retained and marked unavailable. If the root is available but a member folder has been definitively removed—or the stored path is no longer inside any configured root—the stale membership is removed automatically the next time collections are loaded.
+
 ### Keyboard shortcuts
 
 Shortcuts apply to the focused thumbnail or the open viewer.
@@ -194,7 +201,7 @@ Shortcuts apply to the focused thumbnail or the open viewer.
 
 ### Persistent data and backups
 
-`/data/these.db` contains lists, folder metadata, roots, and application settings. SQLite also creates `these.db-wal` and `these.db-shm` while running in WAL mode.
+`/data/these.db` contains lists, folder collections, folder metadata, roots, and application settings. SQLite also creates `these.db-wal` and `these.db-shm` while running in WAL mode.
 
 `/data/cache` contains disposable thumbnails. It can be deleted while *these* is stopped and will be rebuilt on demand. Back up the SQLite files if your selections and folder metadata matter; original media is not part of a *these* backup.
 

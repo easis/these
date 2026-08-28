@@ -42,8 +42,8 @@ describe("AppShell theme switcher", () => {
 
     const desktopNavigation = screen.getByRole("navigation", { name: "Main navigation" });
     const mobileNavigation = screen.getByRole("navigation", { name: "Mobile navigation" });
-    expect(within(desktopNavigation).getAllByRole("link")).toHaveLength(4);
-    expect(within(mobileNavigation).getAllByRole("link")).toHaveLength(4);
+    expect(within(desktopNavigation).getAllByRole("link")).toHaveLength(5);
+    expect(within(mobileNavigation).getAllByRole("link")).toHaveLength(5);
     expect(within(mobileNavigation).getByRole("link", { name: "Lists" })).toHaveAttribute("aria-current", "page");
     expect(within(mobileNavigation).getByRole("link", { name: "Browse" })).not.toHaveAttribute("aria-current");
   });

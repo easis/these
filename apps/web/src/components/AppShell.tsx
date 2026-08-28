@@ -1,4 +1,4 @@
-import { FolderCog, Images, ListChecks, Monitor, Moon, RefreshCw, Settings, Sun, WifiOff } from "lucide-react";
+import { FolderCog, Images, Library, ListChecks, Monitor, Moon, RefreshCw, Settings, Sun, WifiOff } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import type { ThemePreference } from "@these/shared";
@@ -10,6 +10,7 @@ import styles from "./AppShell.module.css";
 
 const navigation = [
   { to: "/browse", label: "Browse", icon: Images },
+  { to: "/collections", label: "Collections", icon: Library },
   { to: "/lists", label: "Lists", icon: ListChecks },
   { to: "/folders", label: "Folders", icon: FolderCog },
   { to: "/settings", label: "Settings", icon: Settings },
