@@ -3,7 +3,7 @@
   <h1><em>these</em></h1>
   <p><strong>Your folders are already the library.</strong></p>
   <p>
-    A self-hosted gallery for browsing image and video folders, building shortlists,<br />
+    A self-hosted gallery for browsing image and video folders, reviewing your choices,<br />
     and downloading the keepers — without importing, moving, or reorganizing a file.
   </p>
   <p>
@@ -32,12 +32,13 @@
 
 ## What is *these*?
 
-*these* is a directory-first media gallery for NAS and homelab collections. Point it at the folders you already have and browse them as they are on disk. The filesystem remains the source of truth; *these* adds only the small amount of state needed to curate it.
+*these* is a directory-first media gallery for NAS and homelab collections. Point it at the folders you already have and browse them as they are on disk. There is no import step: the filesystem remains the source of truth, while *these* stores only the small amount of metadata needed to help you review and organize it.
 
-- **Browse lazily.** Only the folder you open is read; there is no startup scan or import pipeline.
+- **Browse lazily.** Only the folder you open is read, and more media loads automatically as you scroll. There is no startup scan or import pipeline.
 - **Keep originals untouched.** Media mounts can be read-only. Files are never moved, renamed, or stored in SQLite.
-- **Make useful selections.** Sort files into **Selected** and **Maybe**, review them side by side, then stream a ZIP.
-- **Tame large trees.** Give folders aliases, mark favorites, and hide branches without changing anything on disk.
+- **Make clear decisions.** Mark files **Selected**, **Maybe**, or **Discarded**; every decision remains reversible.
+- **Tame large trees.** Give folders aliases, mark favorites, hide branches, and group folders into collections without changing anything on disk.
+- **Use it anywhere.** The responsive interface works on desktop and mobile and can be installed as a PWA.
 - **Stay self-hosted.** One container serves the React app, API, SQLite metadata, thumbnails, and video tooling.
 
 > [!IMPORTANT]
@@ -47,19 +48,19 @@
 
 ### Browse the filesystem, not a catalog
 
-The three-pane browser keeps folders, media, and active lists in one place. Search the open folder by media filename, immediate subfolder name, or folder alias; filter by media type, resize thumbnails, and classify files without leaving the gallery.
+The three-pane browser keeps the folder tree, media gallery, and active list in one place. Switch the tree between **All folders** and any collection, search the open folder by filename, immediate subfolder name, or folder alias, and filter by media type. Thumbnail size, sidebars, and mobile density can all be adjusted without leaving the gallery.
 
 ### Inspect and classify without breaking your flow
 
-Open an image or video in the focused viewer, move through the folder with the arrow keys, and use `1`, `2`, or `0` to update the active list. Technical metadata is fetched only when the details panel is opened.
+Open an image or video in the focused viewer, move through the folder with the arrow keys, and use `1`, `2`, `3`, or `0` to update the active list. Images can be fitted, viewed at actual size, zoomed, and panned. Technical metadata is fetched only when the details panel is opened.
 
-![The focused media viewer with Selected and Maybe controls](docs/assets/screenshots/viewer.jpg)
+![The focused media viewer with Selected, Maybe, and Discarded controls](docs/assets/screenshots/viewer.jpg)
 
 ### Review the keepers
 
-Each list separates confident picks from second-pass candidates. Items can move between groups or be removed inline, and downloads stream directly from the mounted originals.
+Each list separates confident picks, second-pass candidates, and recoverable discards. Items can move between groups or be unclassified inline. The list index can be searched, filtered, and sorted, while ZIP downloads stream directly from the mounted originals.
 
-![A list review with Selected and Maybe groups](docs/assets/screenshots/lists.jpg)
+![A list review with Selected, Maybe, and collapsed Discarded groups](docs/assets/screenshots/lists.jpg)
 
 ## How it works
 
@@ -77,7 +78,7 @@ The server enumerates a directory only when it is opened. Folder children, media
 
 SQLite stores only *these*-owned state:
 
-- lists and each item's **Selected** or **Maybe** status;
+- lists and each item's **Selected**, **Maybe**, or reversible **Discarded** status;
 - named folder collections and their many-to-many memberships;
 - folder aliases, favorites, and hidden flags;
 - configured media roots and the active list.
@@ -97,6 +98,8 @@ docker compose up -d
 
 Open [http://localhost:4000](http://localhost:4000), go to **Settings → Media roots**, and add the container path of each mounted library — for example `/media/photos`.
 
+A **media root** is simply a top-level folder that *these* is allowed to browse. In Docker, always enter the path as it appears **inside the container**, not the original host path.
+
 The included Compose file pulls the public image from GitHub Container Registry. A minimal mount setup looks like this:
 
 ```yaml
@@ -110,6 +113,11 @@ services:
       - /volume1/photos:/media/photos:ro
       - /volume1/videos:/media/videos:ro
 ```
+
+Here `/volume1/photos` is the real host directory and `/media/photos` is its stable path inside the container. Add `/media/photos` in *these* after the service starts; its display label can be anything you like.
+
+> [!TIP]
+> Keep media mounts read-only with `:ro`. Only `/data` needs to be writable.
 
 To update to the latest image:
 
@@ -134,31 +142,33 @@ Service workers require a secure browser context. Plain HTTP works on `localhost
 
 When a new frontend version is deployed, it is downloaded and activated automatically instead of waiting for every open *these* tab or installed window to close. Open browser tabs and installed apps reload automatically once the update is ready.
 
-Here `/volume1/photos` is the real host directory and `/media/photos` is its stable path inside the container. Add `/media/photos` in *these* after the service starts. The display label can be anything you like.
-
-> [!TIP]
-> Keep media mounts read-only with `:ro`. Only `/data` needs to be writable.
-
 ### First-run checklist
 
 1. Mount one or more media directories into the container.
 2. Add their absolute **container paths** in **Settings → Media roots**.
-3. Create a list and make it active.
-4. Browse a folder and mark files **Selected** or **Maybe**.
+3. Create a list and make it active. The active list receives classifications made while browsing.
+4. Browse a folder and mark files **Selected**, **Maybe**, or **Discarded**.
 5. Open the list to review or download the selection as a ZIP.
 
 ## Everyday workflow
 
 ### Lists
 
-A list is one independent selection with two review states:
+A list is one independent review with three states:
 
 - **Selected** is the default download group.
 - **Maybe** keeps uncertain files ready for a second pass.
+- **Discarded** records a negative decision without losing it; the group starts collapsed on the review screen and can be restored at any time.
 
-A media path can have only one state in a list, so moving an item from Maybe to Selected never duplicates it. The same file may belong to several different lists.
+A media path can have only one state in a list, so moving an item between groups never duplicates it. The same file may belong to several different lists, and only the active list changes while you classify media in the browser.
 
-**Download Selected** streams a ZIP directly from mounted files. Maybe and all-item downloads are also available from the list screen and API. If basenames collide, later entries become `name (2).ext`, `name (3).ext`, and so on. Missing files are skipped without deleting their saved references.
+The Lists screen supports name search, **With media**/**Empty** filters, and alphabetical or media-count sorting. **Download Selected** streams a ZIP directly from mounted files; **Maybe** and **All (Selected + Maybe)** downloads are also available. Discarded files are never included automatically. If basenames collide, later entries become `name (2).ext`, `name (3).ext`, and so on. Missing files are skipped without deleting their saved references.
+
+### Browsing and search
+
+The gallery reads media in bounded pages and fetches the next page automatically as you approach the end. Search and image/video filters apply to the open folder only, so even very large directory trees do not need a global index.
+
+On desktop, the folder and list sidebars can be resized or collapsed. On mobile, the same controls move into touch-friendly panels and the gallery offers compact and comfortable densities.
 
 ### Folder metadata
 
@@ -172,9 +182,9 @@ Use inline actions while browsing, or open **Folders** to search and repair meta
 
 ### Folder collections
 
-A collection groups related folders without moving or copying their contents. Open **Collections** to create and manage groups, or use **Add to collections** on the current folder or any child folder while browsing. One folder can belong to several collections.
+A collection groups related folders without moving or copying their contents. Open **Collections** to create and manage groups, or use **Add to collections** on the current folder or any child folder while browsing. One folder can belong to several collections. Collection and list indexes can both be searched, filtered, and sorted.
 
-Opening a collection shows its member folders as shortcuts into the regular browser. Members are sorted by their visible alias or folder name. If an entire media root or an individual folder is temporarily inaccessible, its memberships are retained and marked unavailable. If the root is available but a member folder has been definitively removed—or the stored path is no longer inside any configured root—the stale membership is removed automatically the next time collections are loaded.
+Opening a collection shows its member folders as shortcuts into the regular browser. The folder-tree scope picker also lets you stay inside a collection while moving between its member folders and descendants. Members are sorted by their visible alias or folder name. If an entire media root or an individual folder is temporarily inaccessible, its membership is retained and marked unavailable. If the root is available but a member folder has been definitively removed—or its stored path is no longer inside any configured root—the stale membership is removed automatically the next time collections are loaded.
 
 ### Keyboard shortcuts
 
@@ -186,8 +196,11 @@ Shortcuts apply to the focused thumbnail or the open viewer.
 | `←` / `→` | Previous / next media |
 | `1` | Mark **Selected** in the current list |
 | `2` | Mark **Maybe** in the current list |
+| `3` | Mark **Discarded** in the current list |
 | `0` | Remove from the current list |
 | `I` | Show or hide technical details |
+| `+` / `-` | Zoom an image in or out |
+| `F` / `A` | Fit an image / show it at actual size |
 | `Esc` | Close the viewer or cancel an open text dialog |
 
 ## Configuration
@@ -224,7 +237,7 @@ Files with other extensions are ignored by the gallery.
 Requirements:
 
 - Node.js 22 or newer;
-- pnpm 10;
+- pnpm 11;
 - `ffmpeg` and `ffprobe` on `PATH` for video thumbnails and metadata.
 
 ```sh
@@ -251,7 +264,7 @@ pnpm test
 pnpm build
 ```
 
-Tests cover filesystem containment, symlink escape prevention, folder metadata repair, list state constraints, missing media, filtered pagination, request races, byte ranges, and ZIP filename collisions.
+Tests cover filesystem containment, symlink escape prevention, folder and collection metadata, all three list states, missing media, filtered and automatic pagination, responsive controls, request races, byte ranges, and ZIP filename collisions.
 
 ### Production build
 
@@ -271,10 +284,10 @@ The runtime image contains Node.js, the Fastify server, the compiled React appli
 ## Current limitations
 
 - Single-user; no built-in authentication.
-- No global, recursive, or fuzzy search. Search applies only to the immediate contents of the open folder.
+- No global, recursive, or fuzzy media search. Gallery search applies only to the immediate contents of the open folder.
 - Folder moves are repaired manually rather than detected automatically.
 - Directory symlinks are hidden; direct symlink paths cannot escape a root.
-- The list review screen loads up to 1,000 items. Downloads use a larger bounded set and stream their contents.
+- ZIP downloads are bounded to 100,000 list items per request and can be resource-intensive for very large selections.
 - Mobile uses touch-first navigation and a compact options sheet; the media viewer remains deliberately focused on one item at a time.
 
 ## License
