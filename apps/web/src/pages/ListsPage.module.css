@@ -1,5 +1,12 @@
 .listIndex { margin-top: 13px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: var(--surface); }
-.listIndexRow { min-height: 62px; display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.listTools { display: flex; align-items: center; gap: 7px; margin-top: 13px; }
+.listSearch { width: min(260px, 38vw); }
+.listFilters { height: 28px; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); }
+.listFilters button { height: 22px; padding: 0 7px; border: 0; border-radius: 3px; color: var(--text-muted); background: transparent; font-size: var(--font-ui-xs); cursor: pointer; }
+.listFilters button.active { color: var(--accent); background: var(--accent-soft); }
+.listSort { margin-left: auto; }
+.listSort select { height: 28px; padding: 0 23px 0 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--surface); font-size: var(--font-ui-xs); }
+.listIndexRow { min-height: 68px; display: flex; align-items: center; gap: 9px; padding: 8px 9px 8px 12px; border-bottom: 1px solid var(--border); }
 .listIndexRow:last-child { border-bottom: 0; }
 .listIndexRow:hover { background: var(--surface-secondary); }
 .listIndexRow.active { box-shadow: inset 3px 0 var(--accent); }
@@ -7,4 +14,15 @@
 .listIndexRow strong { display: block; font-size: var(--font-ui-lg); }
 .listCounts { display: flex; flex-wrap: wrap; gap: 4px 11px; margin-top: 4px; color: var(--text-muted); font-size: var(--font-ui-xs); }
 .listCounts span { display: inline-flex; align-items: center; gap: 4px; }
-.emptyMark { width: 54px; height: 36px; display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.emptyMark { width: 62px; height: 36px; display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+
+@media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
+  .listTools { flex-wrap: wrap; }
+  .listSearch { width: 100%; height: 44px; }
+  .listSearch input { height: 42px; }
+  .listFilters { width: 100%; height: 44px; flex: 1; }
+  .listFilters button { min-height: 38px; flex: 1; }
+  .listSort { margin-left: 0; }
+  .listSort select { min-height: 44px; }
+  .listIndexRow { min-height: 72px; padding-left: 10px; }
+}
