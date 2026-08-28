@@ -13,18 +13,21 @@ vi.mock("../lib/preferences", () => ({
   readPreferences: () => ({
     theme: "light",
     thumbnailSize: 180,
+    mobileGalleryDensity: "compact",
     leftSidebarOpen: true,
     leftSidebarWidth: 300,
     rightSidebarOpen: true,
     rightSidebarWidth: 208,
     showHidden: false,
     lastFolder: null,
+    activeCollectionId: null,
+    collectionLastFolders: {},
   }),
   writePreferences: vi.fn(),
 }));
 
-const existingList: TheseList = { id: 1, name: "Existing", selectedCount: 0, maybeCount: 0, createdAt: "", updatedAt: "" };
-const createdList: TheseList = { id: 2, name: "Archive", selectedCount: 0, maybeCount: 0, createdAt: "", updatedAt: "" };
+const existingList: TheseList = { id: 1, name: "Existing", selectedCount: 0, maybeCount: 0, discardedCount: 0, createdAt: "", updatedAt: "" };
+const createdList: TheseList = { id: 2, name: "Archive", selectedCount: 0, maybeCount: 0, discardedCount: 0, createdAt: "", updatedAt: "" };
 const bootstrap: BootstrapResponse = { roots: [], lists: [existingList, createdList], activeListId: 1, favorites: [] };
 
 describe("AppProvider list creation", () => {

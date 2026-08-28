@@ -22,10 +22,13 @@ export function SettingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pathTouched, setPathTouched] = useState(false);
+  const pathError = validateThesePath(draft.path);
 
   const saveRoot = async (event: FormEvent) => {
     event.preventDefault();
-    if (!draft.path.trim()) return;
+    setPathTouched(true);
+    if (pathError) return;
     setSaving(true);
     try {
       await api(editingId ? `/api/settings/media-roots/${editingId}` : "/api/settings/media-roots", {
@@ -34,6 +37,7 @@ export function SettingsPage() {
       });
       setDraft(emptyDraft);
       setEditingId(null);
+      setPathTouched(false);
       setPreferences({ lastFolder: null });
       await refresh();
       setError(null);
@@ -47,6 +51,7 @@ export function SettingsPage() {
   const editRoot = (root: MediaRoot) => {
     setEditingId(root.id);
     setDraft({ label: root.label, path: root.path });
+    setPathTouched(false);
     setError(null);
   };
 
@@ -69,16 +74,16 @@ export function SettingsPage() {
   return (
     <div className={content.pageScroll}><div className={cx(content.contentPage, content.narrow)}>
       <div className={content.pageTitleRow}><div><p className={content.eyebrow}>This browser</p><h1>Settings</h1><p>Gallery preferences stay in this browser. Lists and media roots are stored in <AppName />.</p></div></div>
-      <section className={styles.settingsSection}><h2>Gallery</h2><p>Default thumbnail width. You can also change this from the gallery toolbar.</p><label className={styles.settingRange}><span>Thumbnail size</span><input type="range" min="120" max="280" step="20" value={preferences.thumbnailSize} onChange={(event) => setPreferences({ thumbnailSize: Number(event.target.value) })} /><output>{preferences.thumbnailSize}px</output></label><label className={styles.settingCheck}><input type="checkbox" checked={preferences.showHidden} onChange={(event) => setPreferences({ showHidden: event.target.checked })} /><span>Show hidden folders</span></label></section>
+      <section className={styles.settingsSection}><h2>Gallery</h2><p>Desktop size and mobile density are saved independently in this browser.</p><label className={styles.settingRange}><span>Desktop size</span><input type="range" min="120" max="280" step="20" value={preferences.thumbnailSize} onChange={(event) => setPreferences({ thumbnailSize: Number(event.target.value) })} /><output>{preferences.thumbnailSize}px</output></label><div className={styles.densitySetting}><span>Mobile density</span><div role="group" aria-label="Mobile gallery density"><button type="button" className={preferences.mobileGalleryDensity === "compact" ? styles.active : undefined} aria-pressed={preferences.mobileGalleryDensity === "compact"} onClick={() => setPreferences({ mobileGalleryDensity: "compact" })}>Compact</button><button type="button" className={preferences.mobileGalleryDensity === "comfortable" ? styles.active : undefined} aria-pressed={preferences.mobileGalleryDensity === "comfortable"} onClick={() => setPreferences({ mobileGalleryDensity: "comfortable" })}>Comfortable</button></div></div><label className={styles.settingCheck}><input type="checkbox" checked={preferences.showHidden} onChange={(event) => setPreferences({ showHidden: event.target.checked })} /><span>Show hidden folders</span></label></section>
       <section className={styles.settingsSection}>
         <h2>Media roots</h2>
-        <p>Add the absolute container paths where media is mounted. Missing mounts remain configured and are marked unavailable.</p>
+        <p>Add the paths as they are visible inside <AppName />. Missing mounts remain configured and are marked unavailable.</p>
         {error ? <div className={cx(ui.inlineError, styles.rootError)}>{error}</div> : null}
         <form className={styles.rootForm} onSubmit={(event) => void saveRoot(event)}>
           <label><span>Label</span><input value={draft.label} maxLength={100} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} placeholder="Photos" aria-label="Media root label" /></label>
-          <label className={styles.rootPathField}><span>Absolute path</span><input required value={draft.path} onChange={(event) => setDraft((current) => ({ ...current, path: event.target.value }))} placeholder="/media/photos" aria-label="Media root path" /></label>
-          <button className={cx(ui.compactButton, ui.primary)} type="submit" disabled={saving || !draft.path.trim()}>{editingId ? <Pencil size={13} /> : <Plus size={13} />}{saving ? "Saving…" : editingId ? "Save" : "Add root"}</button>
-          {editingId ? <button className={cx(ui.iconButton, ui.bordered)} type="button" onClick={() => { setEditingId(null); setDraft(emptyDraft); }} aria-label="Cancel editing"><X size={14} /></button> : null}
+          <label className={styles.rootPathField}><span>Path in These</span><input required value={draft.path} onBlur={() => setPathTouched(true)} onChange={(event) => { setDraft((current) => ({ ...current, path: event.target.value })); setPathTouched(true); }} placeholder="/media/photos" aria-label="Path in These" aria-invalid={pathTouched && Boolean(pathError)} aria-describedby={pathTouched && pathError ? "these-path-help these-path-error" : "these-path-help"} /><small id="these-path-help">The application-visible path, for example <code>/media/photos</code>.</small>{pathTouched && pathError ? <small id="these-path-error" className={styles.fieldError} role="alert">{pathError}</small> : null}</label>
+          <button className={cx(ui.compactButton, ui.primary)} type="submit" disabled={saving || Boolean(pathError)}>{editingId ? <Pencil size={13} /> : <Plus size={13} />}{saving ? "Saving…" : editingId ? "Save" : "Add root"}</button>
+          {editingId ? <button className={cx(ui.iconButton, ui.bordered)} type="button" onClick={() => { setEditingId(null); setDraft(emptyDraft); setPathTouched(false); }} title="Cancel editing" aria-label="Cancel editing"><X size={14} /></button> : null}
         </form>
         <div className={styles.settingsRoots}>
           {bootstrap?.roots.length ? bootstrap.roots.map((root) => <div className={styles.rootRow} key={root.id}>
@@ -95,4 +100,10 @@ export function SettingsPage() {
       </section>
     </div></div>
   );
+}
+
+function validateThesePath(value: string) {
+  if (!value) return "Enter the path seen by These.";
+  if (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")) return null;
+  return "Use an absolute application path, such as /media/photos.";
 }

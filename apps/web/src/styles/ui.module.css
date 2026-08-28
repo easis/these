@@ -25,3 +25,9 @@
 .searchControl input::placeholder { color: var(--text-muted); }
 .searchClear { width: 22px; height: 22px; flex: none; display: grid; place-items: center; margin-right: -5px; padding: 0; border: 0; border-radius: 3px; color: var(--text-muted); background: transparent; cursor: pointer; }
 .searchClear:hover { color: var(--text-primary); background: var(--surface-hover); }
+
+@media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
+  .iconButton { width: 44px; height: 44px; }
+  .compactButton { min-height: 44px; }
+  .activeRingControl, .searchClear { width: 44px; height: 44px; }
+}

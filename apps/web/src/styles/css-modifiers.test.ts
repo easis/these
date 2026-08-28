@@ -23,9 +23,11 @@ describe("CSS Module modifier precedence", () => {
       [listSidebarCss, ".listRow.active"],
       [mediaTileCss, ".tileActions button.selectedAction"],
       [mediaTileCss, ".tileActions button.maybeAction"],
+      [mediaTileCss, ".tileActions button.discardedAction"],
       [viewerCss, ".viewerButton.buttonActive"],
       [viewerCss, ".viewerClassify button.selected"],
       [viewerCss, ".viewerClassify button.maybe"],
+      [viewerCss, ".viewerClassify button.discarded"],
       [browsePageCss, ".currentFolderActions button.favorite"],
       [browsePageCss, ".currentFolderActions button.hidden"],
       [browsePageCss, ".mediaKindFilters button.active"],
@@ -34,6 +36,14 @@ describe("CSS Module modifier precedence", () => {
     ] as const;
 
     for (const [css, selector] of stateSelectors) expect(css).toContain(selector);
+  });
+
+  it("uses peripheral state rings and dims only the discarded thumbnail", () => {
+    expect(mediaTileCss).toMatch(/\.selected::before\s*\{[^}]*border-color:/s);
+    expect(mediaTileCss).toMatch(/\.maybe::before\s*\{[^}]*border-style:\s*dashed/s);
+    expect(mediaTileCss).not.toMatch(/inset:\s*0 auto 0 0/);
+    expect(mediaTileCss).toMatch(/\.discarded \.mediaOpen img\s*\{[^}]*opacity:\s*\.52[^}]*filter:/s);
+    expect(mediaTileCss).toMatch(/\.mediaTile:focus-within\s*\{[^}]*outline:\s*2px solid[^}]*outline-offset:\s*2px/s);
   });
 
   it("prevents the active-list ring from shrinking", () => {

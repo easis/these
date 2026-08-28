@@ -15,11 +15,11 @@ vi.mock("../state/app-context", () => ({
   useApp: () => ({
     bootstrap: {
       lists: [
-        { id: 7, name: "Keepers", selectedCount: 12, maybeCount: 3, createdAt: "", updatedAt: "" },
-        { id: 8, name: "Review", selectedCount: 1, maybeCount: 0, createdAt: "", updatedAt: "" },
+        { id: 7, name: "Keepers", selectedCount: 12, maybeCount: 3, discardedCount: 2, createdAt: "", updatedAt: "" },
+        { id: 8, name: "Review", selectedCount: 1, maybeCount: 0, discardedCount: 0, createdAt: "", updatedAt: "" },
       ],
     },
-    activeList: { id: 7, name: "Keepers", selectedCount: 12, maybeCount: 3, createdAt: "", updatedAt: "" },
+    activeList: { id: 7, name: "Keepers", selectedCount: 12, maybeCount: 3, discardedCount: 2, createdAt: "", updatedAt: "" },
     preferences: { leftSidebarOpen: mocks.leftSidebarOpen, rightSidebarWidth: mocks.rightSidebarWidth },
     setActiveList: mocks.setActiveList,
     createList: mocks.createList,

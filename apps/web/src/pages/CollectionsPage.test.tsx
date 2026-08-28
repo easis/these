@@ -24,4 +24,31 @@ describe("CollectionsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create collection" }));
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/collections", expect.objectContaining({ body: JSON.stringify({ name: "Dogs" }) })));
   });
+
+  it("searches, filters, sorts, and clears collection results locally", async () => {
+    mocks.api.mockResolvedValue([
+      { id: 1, name: "Zoo", folderCount: 2, createdAt: "", updatedAt: "" },
+      { id: 2, name: "Archive", folderCount: 0, createdAt: "", updatedAt: "" },
+      { id: 3, name: "Birds", folderCount: 8, createdAt: "", updatedAt: "" },
+    ]);
+    render(<MemoryRouter><CollectionsPage /></MemoryRouter>);
+    expect(await screen.findByRole("link", { name: "Open Archive" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search collections"), { target: { value: "zoo" } });
+    expect(screen.getByText("Zoo")).toBeInTheDocument();
+    expect(screen.queryByText("Archive")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear collection search" }));
+    fireEvent.click(screen.getByRole("button", { name: "Empty" }));
+    expect(screen.getByText("Archive")).toBeInTheDocument();
+    expect(screen.queryByText("Birds")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Sort collections"), { target: { value: "most-folders" } });
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getAllByText(/Birds|Zoo|Archive/).map((node) => node.textContent)).toEqual(["Birds", "Zoo", "Archive"]);
+
+    fireEvent.change(screen.getByLabelText("Search collections"), { target: { value: "missing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Clear results" }));
+    expect(screen.getByText("Archive")).toBeInTheDocument();
+  });
 });

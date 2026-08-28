@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, rename, rm, symlink, unlink, writeFile } from "n
 import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import type { BootstrapResponse, BrowseResponse, FolderCollection, FolderCollectionDetail, FolderMetadata, ListItem, MediaMetadataResponse, TheseList } from "@these/shared";
+import type { BootstrapResponse, BrowseResponse, FolderCollection, FolderCollectionDetail, FolderMetadata, ListItem, ListItemStatus, MediaMetadataResponse, TheseList } from "@these/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig, parseMediaRoots } from "../src/config.js";
 
@@ -175,15 +175,21 @@ describe("These API", () => {
     const homepage = await createList(app!, "Homepage");
 
     await setItem(app!, dogs.id, mediaPath, "maybe");
-    await setItem(app!, dogs.id, mediaPath, "selected");
+    await setItem(app!, dogs.id, mediaPath, "discarded");
     await setItem(app!, homepage.id, mediaPath, "maybe");
 
     const dogsItems = (await app!.inject({ method: "GET", url: `/api/lists/${dogs.id}/items` })).json<ListItem[]>();
     const homepageItems = (await app!.inject({ method: "GET", url: `/api/lists/${homepage.id}/items` })).json<ListItem[]>();
     expect(dogsItems).toHaveLength(1);
-    expect(dogsItems[0]?.status).toBe("selected");
+    expect(dogsItems[0]?.status).toBe("discarded");
     expect(homepageItems).toHaveLength(1);
     expect(homepageItems[0]?.status).toBe("maybe");
+    expect((await app!.inject({ method: "GET", url: `/api/lists/${dogs.id}/items?status=discarded` })).json<ListItem[]>()).toHaveLength(1);
+    expect((await app!.inject({ method: "GET", url: "/api/lists" })).json<TheseList[]>()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: dogs.id, selectedCount: 0, maybeCount: 0, discardedCount: 1 }),
+      expect.objectContaining({ id: homepage.id, selectedCount: 0, maybeCount: 1, discardedCount: 0 }),
+    ]));
+    expect((await app!.inject({ method: "PUT", url: `/api/lists/${dogs.id}/items`, payload: { path: mediaPath, kind: "image", status: "unknown" } })).statusCode).toBe(400);
   });
 
   it("filters media names case-insensitively before paginating", async () => {
@@ -455,6 +461,27 @@ describe("These API", () => {
     expect(response.rawPayload.includes(Buffer.from("same.jpg"))).toBe(true);
     expect(response.rawPayload.includes(Buffer.from("same (2).jpg"))).toBe(true);
   });
+
+  it("excludes discarded items from all downloads and rejects a discarded download", async () => {
+    const selected = path.join(root, "selected.jpg");
+    const maybe = path.join(root, "maybe.jpg");
+    const discarded = path.join(root, "discarded.jpg");
+    await Promise.all([writeFile(selected, "selected"), writeFile(maybe, "maybe"), writeFile(discarded, "discarded")]);
+    const list = await createList(app!, "Review");
+    await setItem(app!, list.id, selected, "selected");
+    await setItem(app!, list.id, maybe, "maybe");
+    await setItem(app!, list.id, discarded, "discarded");
+
+    const all = await app!.inject({ method: "GET", url: `/api/lists/${list.id}/download?status=all` });
+    expect(all.statusCode).toBe(200);
+    expect(all.headers["x-these-included"]).toBe("2");
+    expect(all.rawPayload.includes(Buffer.from("selected.jpg"))).toBe(true);
+    expect(all.rawPayload.includes(Buffer.from("maybe.jpg"))).toBe(true);
+    expect(all.rawPayload.includes(Buffer.from("discarded.jpg"))).toBe(false);
+
+    const rejected = await app!.inject({ method: "GET", url: `/api/lists/${list.id}/download?status=discarded` });
+    expect(rejected.statusCode).toBe(400);
+  });
 });
 
 async function createList(app: FastifyInstance, name: string) {
@@ -467,7 +494,7 @@ async function createCollection(app: FastifyInstance, name: string) {
   return response.json<FolderCollection>();
 }
 
-async function setItem(app: FastifyInstance, listId: number, mediaPath: string, status: "selected" | "maybe") {
+async function setItem(app: FastifyInstance, listId: number, mediaPath: string, status: ListItemStatus) {
   const response = await app.inject({ method: "PUT", url: `/api/lists/${listId}/items`, payload: { path: mediaPath, kind: "image", status } });
   expect(response.statusCode).toBe(200);
 }

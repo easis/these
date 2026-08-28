@@ -18,6 +18,7 @@ export class Repository {
       ...row,
       selectedCount: countMap.get(`${row.id}:selected`) ?? 0,
       maybeCount: countMap.get(`${row.id}:maybe`) ?? 0,
+      discardedCount: countMap.get(`${row.id}:discarded`) ?? 0,
     }));
   }
 
@@ -25,7 +26,7 @@ export class Repository {
     const cleanName = name.trim();
     if (!cleanName || cleanName.length > 100) throw new AppError("List name must contain 1 to 100 characters.");
     const [created] = await this.db.insert(lists).values({ name: cleanName }).returning();
-    return created!;
+    return { ...created!, selectedCount: 0, maybeCount: 0, discardedCount: 0 };
   }
 
   async renameList(id: number, name: string) {
@@ -70,8 +71,10 @@ export class Repository {
     return new Map(rows.map((row) => [row.path, row.status]));
   }
 
-  async getListItems(listId: number, status?: ListItemStatus, limit = 500, offset = 0) {
-    const condition = status ? and(eq(listItems.listId, listId), eq(listItems.status, status)) : eq(listItems.listId, listId);
+  async getListItems(listId: number, status?: ListItemStatus | ListItemStatus[], limit = 500, offset = 0) {
+    const condition = status
+      ? and(eq(listItems.listId, listId), Array.isArray(status) ? inArray(listItems.status, status) : eq(listItems.status, status))
+      : eq(listItems.listId, listId);
     return this.db.select().from(listItems).where(condition).orderBy(listItems.id).limit(limit).offset(offset);
   }
 

@@ -34,7 +34,7 @@ export function HomePage() {
             <Images size={18} /><span><strong>Browse media</strong><small>Open folders and inspect files</small></span><ArrowRight size={16} />
           </Link>
           <Link className={styles.homeAction} to="/collections"><Library size={18} /><span><strong>Folder collections</strong><small>Group related datasets across roots</small></span><ArrowRight size={16} /></Link>
-          <Link className={styles.homeAction} to="/lists"><ListChecks size={18} /><span><strong>Review lists</strong><small>Selected and Maybe, side by side</small></span><ArrowRight size={16} /></Link>
+          <Link className={styles.homeAction} to="/lists"><ListChecks size={18} /><span><strong>Review lists</strong><small>Selected, Maybe, and recoverable Discarded media</small></span><ArrowRight size={16} /></Link>
           <Link className={styles.homeAction} to="/folders"><FolderHeart size={18} /><span><strong>Folder metadata</strong><small>Aliases, favorites and hidden folders</small></span><ArrowRight size={16} /></Link>
         </div>
 

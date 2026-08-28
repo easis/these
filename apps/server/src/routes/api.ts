@@ -318,7 +318,7 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
   app.get<{ Params: { id: string }; Querystring: { status?: string } }>("/api/lists/:id/download", async (request, reply) => {
     const id = requireId(request.params.id);
     const requestedStatus = request.query.status ?? "selected";
-    const status = requestedStatus === "all" ? undefined : requireStatus(requestedStatus);
+    const status = requireDownloadStatus(requestedStatus);
     const [availableLists, items] = await Promise.all([repository.getLists(), repository.getListItems(id, status, 100_000, 0)]);
     const list = availableLists.find((candidate) => candidate.id === id);
     if (!list) throw new AppError("List not found.", 404, "LIST_NOT_FOUND");
@@ -425,8 +425,16 @@ function requireMediaKind(mediaPath: string): MediaKind {
 }
 
 function requireStatus(value: unknown): ListItemStatus {
-  if (value !== "selected" && value !== "maybe") throw new AppError("Status must be selected or maybe.");
+  if (value !== "selected" && value !== "maybe" && value !== "discarded") {
+    throw new AppError("Status must be selected, maybe, or discarded.");
+  }
   return value;
+}
+
+function requireDownloadStatus(value: unknown): ListItemStatus | ListItemStatus[] {
+  if (value === "all") return ["selected", "maybe"];
+  if (value === "selected" || value === "maybe") return value;
+  throw new AppError("Download status must be selected, maybe, or all.");
 }
 
 function requireId(value: string): number {

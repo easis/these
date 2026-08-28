@@ -80,7 +80,7 @@ export function CollectionPage() {
             <button className={cx(ui.iconButton, ui.dangerHover)} type="button" onClick={() => void removeFolder(folder.path)} aria-label={`Remove ${folder.displayName} from ${collection.name}`}><Trash2 size={14} /></button>
           </div>
         </article>)}
-      </div> : !loading && collection ? <div className={content.emptyState}><FolderHeart size={24} /><h2>This collection is empty</h2><p>Open Browse and use “Add to collections” on any folder.</p></div> : null}
+      </div> : !loading && collection ? <div className={content.emptyState}><FolderHeart size={24} /><h2>This collection is empty</h2><p>Browse your folders and add any of them to this collection.</p><Link className={cx(ui.compactButton, ui.primary)} to="/browse"><Images size={13} />Browse folders</Link></div> : null}
       {renaming && collection ? <TextInputDialog title="Rename collection" label="Collection name" initialValue={collection.name} maxLength={100} submitLabel="Save name" onSubmit={async (name) => { await api(`/api/collections/${collection.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); await load(); }} onClose={() => setRenaming(false)} /> : null}
     </div></div>
   );
