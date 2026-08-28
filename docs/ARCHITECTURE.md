@@ -28,7 +28,7 @@ The second check prevents a symlink below a media root from escaping to another 
 
 The server reads only the directory the user opens. It sorts the supported media filenames, returns a bounded page, and stats only that page. Thumbnails are requested independently and cached using a key derived from path, modification time, file size and requested thumbnail size.
 
-The folder tree requests children only when a node is expanded. The web gallery renders virtual rows and requests more media explicitly.
+The folder tree requests children only when a node is expanded. The web gallery renders virtual rows and requests the next bounded media page automatically as the user approaches the end.
 
 Technical metadata is also lazy. Opening the viewer does not inspect the source file; the details panel requests only the current item. The server uses sharp and EXIF parsing for images or a bounded `ffprobe` process for videos, and returns partial file information when embedded metadata cannot be decoded.
 

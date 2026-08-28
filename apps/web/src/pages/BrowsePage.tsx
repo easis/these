@@ -44,6 +44,7 @@ export function BrowsePage() {
   const [response, setResponse] = useState<BrowseResponse | null>(null);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [classificationAnnouncement, setClassificationAnnouncement] = useState("");
@@ -201,6 +202,7 @@ export function BrowsePage() {
     const sequence = ++requestSequence.current;
     loadMoreController.current?.abort();
     autoPrefetchKey.current = null;
+    setLoadMoreFailed(false);
     const activeListId = activeList?.id ?? null;
     const activeListChanged = previousActiveListId.current !== undefined && previousActiveListId.current !== activeListId;
     previousActiveListId.current = activeListId;
@@ -270,6 +272,8 @@ export function BrowsePage() {
     loadMoreController.current?.abort();
     const controller = new AbortController();
     loadMoreController.current = controller;
+    setRequestError(null);
+    setLoadMoreFailed(false);
     setLoadingMore(true);
     const operation = (async (): Promise<LoadMoreResult> => {
       let cursor = currentResponse;
@@ -286,10 +290,12 @@ export function BrowsePage() {
           added += next.media.length;
         }
         setRequestError(null);
+        setLoadMoreFailed(false);
         return { added, applied: true, hasMore: cursor.hasMore };
       } catch (caught) {
         if (sequence === requestSequence.current && !isAbortError(caught)) {
           setRequestError(caught instanceof Error ? caught.message : "Could not load more media.");
+          setLoadMoreFailed(true);
         }
         return { added: 0, applied: false, hasMore: cursor.hasMore };
       }
@@ -470,7 +476,7 @@ export function BrowsePage() {
         {error && !aliasFolder ? <div className={ui.inlineError}>{error}</div> : null}
         <div ref={galleryScroll} className={styles.galleryScroll} aria-busy={loading} data-gallery-scroll>
           {response?.folders.length ? <FolderGrid folders={response.folders} pendingPaths={pendingFolderPaths} onOpen={openFolder} onUpdate={updateFolder} onEditAlias={editAlias} onEditCollections={setCollectionsFolder} /> : null}
-          {media.length ? <VirtualGallery scrollElementRef={galleryScroll} folderCount={response?.folders.length ?? 0} media={media} size={gallerySize} activeList={Boolean(activeList)} pendingPaths={pendingMediaPaths} hasMore={Boolean(response?.hasMore)} loading={loading} onLoadMore={() => void loadMore()} onOpen={openViewer} onStatus={classify} />
+          {media.length ? <VirtualGallery scrollElementRef={galleryScroll} folderCount={response?.folders.length ?? 0} media={media} size={gallerySize} activeList={Boolean(activeList)} pendingPaths={pendingMediaPaths} hasMore={Boolean(response?.hasMore)} loading={loading} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMoreKey={`${requestSequence.current}:${response?.path ?? ""}:${response?.offset ?? 0}:${media.length}`} onLoadMore={loadMore} onOpen={openViewer} onStatus={classify} />
             : collectionScope.collectionId !== null && !collectionScope.loading && collectionScope.activeCollection && collectionScope.visibleFolders.length === 0 ? <CollectionEmptyState collection={collectionScope.activeCollection} />
               : loading && !response ? <div className={styles.emptyGallery}>Opening folder…</div>
               : filter && response?.folders.length === 0 ? <div className={styles.emptyGallery}>No files or folders match this search.</div>
@@ -592,8 +598,10 @@ function isSameOrDescendantPath(folderPath: string, ancestorPath: string) {
   return folderPath.startsWith(`${ancestorPath}/`) || folderPath.startsWith(`${ancestorPath}\\`);
 }
 
-function VirtualGallery({ scrollElementRef, folderCount, media, size, activeList, pendingPaths, hasMore, loading, onLoadMore, onOpen, onStatus }: { scrollElementRef: RefObject<HTMLDivElement | null>; folderCount: number; media: MediaEntry[]; size: number; activeList: boolean; pendingPaths: Set<string>; hasMore: boolean; loading: boolean; onLoadMore: () => void; onOpen: (index: number) => void; onStatus: (item: MediaEntry, status: ListItemStatus | null) => void }) {
+function VirtualGallery({ scrollElementRef, folderCount, media, size, activeList, pendingPaths, hasMore, loading, loadingMore, loadMoreFailed, loadMoreKey, onLoadMore, onOpen, onStatus }: { scrollElementRef: RefObject<HTMLDivElement | null>; folderCount: number; media: MediaEntry[]; size: number; activeList: boolean; pendingPaths: Set<string>; hasMore: boolean; loading: boolean; loadingMore: boolean; loadMoreFailed: boolean; loadMoreKey: string; onLoadMore: () => Promise<LoadMoreResult>; onOpen: (index: number) => void; onStatus: (item: MediaEntry, status: ListItemStatus | null) => void }) {
   const galleryRef = useRef<HTMLDivElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  const attemptedLoadKey = useRef<string | null>(null);
   const [layout, setLayout] = useState({ width: 800, scrollMargin: 0 });
   useLayoutEffect(() => {
     const gallery = galleryRef.current;
@@ -615,6 +623,18 @@ function VirtualGallery({ scrollElementRef, folderCount, media, size, activeList
   const columns = Math.max(1, Math.floor((layout.width + gap) / (size + gap)));
   const rowCount = Math.ceil(media.length / columns);
   const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => scrollElementRef.current, estimateSize: () => size + 32 + gap, overscan: 3, scrollMargin: layout.scrollMargin });
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    const scrollElement = scrollElementRef.current;
+    if (!sentinel || !scrollElement || !hasMore || loading || loadMoreFailed) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting) || attemptedLoadKey.current === loadMoreKey) return;
+      attemptedLoadKey.current = loadMoreKey;
+      void onLoadMore();
+    }, { root: scrollElement, rootMargin: "600px 0px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadMoreFailed, loadMoreKey, loading, onLoadMore, scrollElementRef]);
   return (
     <div ref={galleryRef} className={styles.virtualGalleryScroll}>
       <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize() + (hasMore ? 46 : 8)}px` }}>
@@ -626,7 +646,11 @@ function VirtualGallery({ scrollElementRef, folderCount, media, size, activeList
             })}
           </div>
         ))}
-        {hasMore ? <button className={styles.loadMore} style={{ top: virtualizer.getTotalSize() }} type="button" disabled={loading} onClick={onLoadMore}>{loading ? "Loading…" : "Load more"}</button> : null}
+        {hasMore ? <div ref={loadMoreSentinelRef} className={styles.loadMoreSentinel} style={{ top: virtualizer.getTotalSize() }}>
+          {loadMoreFailed
+            ? <button className={ui.compactButton} type="button" disabled={loading} onClick={() => void onLoadMore()}>Retry loading more</button>
+            : loadingMore ? <span role="status" aria-live="polite">Loading more…</span> : <span className="sr-only">More media loads automatically as you scroll.</span>}
+        </div> : null}
       </div>
     </div>
   );

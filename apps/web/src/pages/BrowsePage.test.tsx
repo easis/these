@@ -30,6 +30,13 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+const intersectionObservers: Array<{
+  callback: IntersectionObserverCallback;
+  options?: IntersectionObserverInit;
+  observed: Element[];
+  disconnect: ReturnType<typeof vi.fn>;
+}> = [];
+
 vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: (options: { count: number; getScrollElement: () => Element | null; scrollMargin: number }) => {
     mocks.virtualizerOptions = options;
@@ -73,6 +80,20 @@ describe("BrowsePage requests", () => {
     mocks.refresh.mockReset();
     mocks.virtualizerOptions = null;
     mocks.activeList = null;
+    intersectionObservers.length = 0;
+    vi.stubGlobal("IntersectionObserver", class {
+      private readonly record;
+
+      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        this.record = { callback, options, observed: [] as Element[], disconnect: vi.fn() };
+        intersectionObservers.push(this.record);
+      }
+
+      observe = (element: Element) => { this.record.observed.push(element); };
+      unobserve = vi.fn();
+      disconnect = () => this.record.disconnect();
+      takeRecords = () => [];
+    });
     Object.assign(mocks.preferences, {
       theme: "light",
       thumbnailSize: 180,
@@ -402,12 +423,131 @@ describe("BrowsePage requests", () => {
     fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "Cat" } });
     await waitFor(() => expect(mocks.api.mock.calls.some(([url]) => new URL(url as string, "http://these.test").searchParams.get("filter") === "Cat")).toBe(true));
 
-    const loadMore = await screen.findByRole("button", { name: "Load more" });
-    fireEvent.click(loadMore);
+    await screen.findByText("Cat-0.jpg");
+    intersectLatestSentinel();
     await waitFor(() => expect(mocks.api.mock.calls.some(([url]) => {
       const parameters = new URL(url as string, "http://these.test").searchParams;
       return parameters.get("filter") === "Cat" && parameters.get("offset") === "1";
     })).toBe(true));
+  });
+
+  it("loads more media near the end without duplicate requests", async () => {
+    const secondPage = deferred<BrowseResponse>();
+    mocks.api.mockImplementation((url: string) => {
+      const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
+      if (offset === 0) {
+        return Promise.resolve(browseResponse("/media", 3, {
+          limit: 1,
+          hasMore: true,
+          media: [mediaEntry("/media/first.jpg")],
+        }));
+      }
+      if (offset === 1) return secondPage.promise;
+      return Promise.resolve(browseResponse("/media", 3, {
+        offset: 2,
+        limit: 1,
+        media: [mediaEntry("/media/third.jpg")],
+      }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("first.jpg")).toBeInTheDocument();
+    const observer = latestIntersectionObserver();
+    expect(observer.options?.root).toBe(document.querySelector(`.${styles.galleryScroll}`));
+    expect(observer.options?.rootMargin).toBe("600px 0px");
+
+    intersectLatestSentinel();
+    intersectLatestSentinel();
+    await waitFor(() => expect(requestsAtOffset(1)).toHaveLength(1));
+
+    secondPage.resolve(browseResponse("/media", 3, {
+      offset: 1,
+      limit: 1,
+      hasMore: true,
+      media: [mediaEntry("/media/second.jpg")],
+    }));
+    expect(await screen.findByText("second.jpg")).toBeInTheDocument();
+
+    await waitFor(() => expect(latestIntersectionObserver()).not.toBe(observer));
+    intersectLatestSentinel();
+    await waitFor(() => expect(requestsAtOffset(2)).toHaveLength(1));
+    expect(await screen.findByText("third.jpg")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("does not apply an automatic page after the search changes", async () => {
+    const stalePage = deferred<BrowseResponse>();
+    mocks.api.mockImplementation((url: string) => {
+      const parameters = new URL(url, "http://these.test").searchParams;
+      const offset = Number(parameters.get("offset"));
+      const filter = parameters.get("filter");
+      if (filter === "Cat") {
+        return Promise.resolve(browseResponse("/media", 1, {
+          limit: 1,
+          media: [mediaEntry("/media/cat.jpg")],
+        }));
+      }
+      if (offset === 1) return stalePage.promise;
+      return Promise.resolve(browseResponse("/media", 2, {
+        limit: 1,
+        hasMore: true,
+        media: [mediaEntry("/media/first.jpg")],
+      }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("first.jpg")).toBeInTheDocument();
+    intersectLatestSentinel();
+    await waitFor(() => expect(requestsAtOffset(1)).toHaveLength(1));
+
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "Cat" } });
+    expect(await screen.findByText("cat.jpg")).toBeInTheDocument();
+    stalePage.resolve(browseResponse("/media", 2, {
+      offset: 1,
+      limit: 1,
+      media: [mediaEntry("/media/stale.jpg")],
+    }));
+    await act(async () => Promise.resolve());
+
+    expect(screen.queryByText("stale.jpg")).not.toBeInTheDocument();
+    expect(screen.getByText("cat.jpg")).toBeInTheDocument();
+  });
+
+  it("stops automatic retries after a failure and offers an explicit retry", async () => {
+    let attempts = 0;
+    mocks.api.mockImplementation((url: string) => {
+      const offset = Number(new URL(url, "http://these.test").searchParams.get("offset"));
+      if (offset === 0) {
+        return Promise.resolve(browseResponse("/media", 2, {
+          limit: 1,
+          hasMore: true,
+          media: [mediaEntry("/media/first.jpg")],
+        }));
+      }
+      attempts += 1;
+      return attempts === 1
+        ? Promise.reject(new Error("Could not load the next page."))
+        : Promise.resolve(browseResponse("/media", 2, {
+          offset: 1,
+          limit: 1,
+          media: [mediaEntry("/media/second.jpg")],
+        }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("first.jpg")).toBeInTheDocument();
+    intersectLatestSentinel();
+
+    expect(await screen.findByText("Could not load the next page.")).toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Retry loading more" });
+    intersectLatestSentinel();
+    await act(async () => Promise.resolve());
+    expect(attempts).toBe(1);
+
+    fireEvent.click(retry);
+    expect(await screen.findByText("second.jpg")).toBeInTheDocument();
+    expect(attempts).toBe(2);
+    expect(screen.queryByRole("button", { name: "Retry loading more" })).not.toBeInTheDocument();
   });
 
   it("renders matching folders, clears the combined search, and only shows the empty state when nothing matches", async () => {
@@ -1338,4 +1478,15 @@ function deferred<T>() {
 
 function requestsAtOffset(offset: number) {
   return mocks.api.mock.calls.filter(([url]) => Number(new URL(url as string, "http://these.test").searchParams.get("offset")) === offset);
+}
+
+function latestIntersectionObserver() {
+  const observer = intersectionObservers.at(-1);
+  if (!observer) throw new Error("Expected an IntersectionObserver.");
+  return observer;
+}
+
+function intersectLatestSentinel() {
+  const observer = latestIntersectionObserver();
+  act(() => observer.callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
 }
