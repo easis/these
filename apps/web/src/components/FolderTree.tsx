@@ -3,8 +3,12 @@ import { memo, useCallback, useEffect, useState, type CSSProperties } from "reac
 import { useNavigate } from "react-router-dom";
 import type { BrowseResponse, FolderEntry } from "@these/shared";
 import { api, isAbortError, query } from "../lib/api";
+import { cx } from "../lib/cx";
 import { folderSidebarWidth } from "../lib/preferences";
 import { useApp } from "../state/app-context";
+import ui from "../styles/ui.module.css";
+import styles from "./FolderTree.module.css";
+import sidebar from "./Sidebar.module.css";
 import { useSidebarResize } from "./useSidebarResize";
 
 interface TreeNodeProps {
@@ -45,18 +49,18 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
 
   return (
     <div role="treeitem" aria-expanded={expanded}>
-      <div className={`tree-row ${currentPath === folder.path ? "is-current" : ""} ${hidden ? "is-hidden" : ""}`} style={{ paddingLeft: `${6 + depth * 14}px` }}>
-        <button type="button" className="tree-toggle" onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} ${folder.displayName}`}>
+      <div className={cx(styles.treeRow, currentPath === folder.path && styles.current, hidden && styles.hidden)} style={{ paddingLeft: `${6 + depth * 14}px` }}>
+        <button type="button" className={styles.treeToggle} onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} ${folder.displayName}`}>
           <ChevronRight className={expanded ? "rotate-90" : ""} size={13} />
         </button>
-        <button type="button" className="tree-label" onClick={() => onOpen(folder.path)} title={folder.path}>
+        <button type="button" className={styles.treeLabel} onClick={() => onOpen(folder.path)} title={folder.path}>
           <Folder size={14} fill="currentColor" fillOpacity={0.08} />
           <span className="truncate">{folder.displayName}</span>
         </button>
       </div>
       {expanded ? (
         <div role="group">
-          {loading ? <div className="tree-note" style={{ paddingLeft: `${28 + depth * 14}px` }}>Loading…</div> : null}
+          {loading ? <div className={styles.treeNote} style={{ paddingLeft: `${28 + depth * 14}px` }}>Loading…</div> : null}
           {children?.map((child) => {
             const childHidden = isEffectivelyHidden(child.path, child.hidden, hiddenOverrides);
             return showHidden || !childHidden ? <TreeNode key={child.path} folder={child} depth={depth + 1} currentPath={currentPath} showHidden={showHidden} hiddenOverrides={hiddenOverrides} onOpen={onOpen} /> : null;
@@ -81,13 +85,13 @@ export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides
   }, [navigate, onNavigate]);
   const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides))) ?? [];
   return (
-    <aside ref={resize.sidebarRef} id="folder-sidebar" className="side-panel left-panel" role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined} style={{ "--sidebar-width": `${resize.renderedWidth}px` } as CSSProperties}>
-      <div className="panel-heading"><span>Folders</span>{onClose ? <button className="icon-button panel-close" type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
+    <aside ref={resize.sidebarRef} id="folder-sidebar" className={cx(sidebar.sidePanel, styles.leftPanel)} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined} style={{ "--sidebar-width": `${resize.renderedWidth}px` } as CSSProperties}>
+      <div className={sidebar.panelHeading}><span>Folders</span>{onClose ? <button className={cx(ui.iconButton, sidebar.panelClose, sidebar.mobileClose)} type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
       {visibleFavorites.length ? (
         <section className="border-b border-default pb-2">
-          <h2 className="panel-section-label"><FolderHeart size={12} /> Favorites</h2>
+          <h2 className={styles.panelSectionLabel}><FolderHeart size={12} /> Favorites</h2>
           {visibleFavorites.map((favorite) => (
-            <button className={`favorite-row ${isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides) ? "is-hidden" : ""}`} type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
+            <button className={cx(styles.favoriteRow, isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides) && styles.hidden)} type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
               <span className="truncate">{favorite.alias ?? favorite.path.split("/").pop()}</span>
             </button>
           ))}
@@ -97,11 +101,11 @@ export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides
         {bootstrap?.roots.map((root) => {
           const folder: FolderEntry = { path: root.path, name: root.label, displayName: root.label, hidden: false, favorite: false };
           return root.available ? <TreeNode key={root.id} folder={folder} depth={0} currentPath={currentPath} showHidden={preferences.showHidden} hiddenOverrides={hiddenOverrides} onOpen={open} /> : (
-            <div key={root.id} className="tree-row opacity-50" title={`${root.path} is unavailable`}><HardDrive size={14} /><span className="truncate">{root.label}</span></div>
+            <div key={root.id} className={cx(styles.treeRow, "opacity-50")} title={`${root.path} is unavailable`}><HardDrive size={14} /><span className="truncate">{root.label}</span></div>
           );
         })}
       </div>
-      {!modal ? <div ref={resize.separatorRef} className="sidebar-resizer folder-sidebar-resizer" role="separator" aria-label="Resize folder sidebar" aria-orientation="vertical" aria-valuemin={folderSidebarWidth.min} aria-valuemax={resize.maximumWidth} aria-valuenow={resize.renderedWidth} aria-valuetext={`${resize.renderedWidth} pixels`} tabIndex={0} title="Resize folders" onPointerDown={resize.startResize} onPointerMove={resize.continueResize} onPointerUp={resize.endResize} onPointerCancel={resize.cancelResize} onKeyDown={resize.resizeWithKeyboard} /> : null}
+      {!modal ? <div ref={resize.separatorRef} className={cx(sidebar.sidebarResizer, styles.folderSidebarResizer)} role="separator" aria-label="Resize folder sidebar" aria-orientation="vertical" aria-valuemin={folderSidebarWidth.min} aria-valuemax={resize.maximumWidth} aria-valuenow={resize.renderedWidth} aria-valuetext={`${resize.renderedWidth} pixels`} tabIndex={0} title="Resize folders" onPointerDown={resize.startResize} onPointerMove={resize.continueResize} onPointerUp={resize.endResize} onPointerCancel={resize.cancelResize} onKeyDown={resize.resizeWithKeyboard} /> : null}
     </aside>
   );
 }

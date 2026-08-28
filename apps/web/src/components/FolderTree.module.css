@@ -1,0 +1,23 @@
+.leftPanel { position: relative; width: var(--sidebar-width, 300px); border-right: 1px solid var(--border); }
+.panelSectionLabel { height: 27px; display: flex; align-items: center; gap: 5px; margin: 0; padding: 0 9px; color: var(--text-muted); font-size: var(--font-ui-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.favoriteRow { width: calc(100% - 12px); height: 25px; display: block; margin: 0 6px; padding: 0 7px; border: 0; border-radius: 4px; color: var(--text-secondary); background: transparent; text-align: left; font-size: var(--font-ui-md); cursor: pointer; }
+.favoriteRow:hover { color: var(--text-primary); background: var(--surface-hover); }
+.hidden { opacity: .58; }
+.hidden:hover, .hidden:focus-visible, .hidden:focus-within { opacity: .82; }
+.treeRow { height: 27px; display: flex; align-items: center; gap: 1px; padding-right: 5px; color: var(--text-secondary); font-size: var(--font-ui-md); }
+.treeRow:hover, .current { color: var(--text-primary); background: var(--surface-hover); }
+.current { box-shadow: inset 2px 0 var(--accent); }
+.treeToggle { width: 18px; height: 20px; flex: none; display: grid; place-items: center; border: 0; border-radius: 3px; color: var(--text-muted); background: transparent; cursor: pointer; }
+.treeToggle:hover { background: color-mix(in srgb, var(--text-primary) 7%, transparent); }
+.treeToggle svg { transition: transform 100ms ease; }
+.treeLabel { min-width: 0; height: 25px; flex: 1; display: flex; align-items: center; gap: 5px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.treeNote { height: 25px; display: flex; align-items: center; color: var(--text-muted); font-size: var(--font-ui-xs); }
+.folderSidebarResizer { right: -6px; }
+
+@media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
+  .leftPanel { position: absolute; z-index: 40; left: 0; top: 0; bottom: 0; width: min(86vw, 330px); box-shadow: 8px 0 18px rgb(0 0 0 / 8%); }
+  .favoriteRow { min-height: 44px; display: flex; align-items: center; padding-inline: 10px; }
+  .treeRow { min-height: 44px; height: auto; }
+  .treeToggle { width: 40px; height: 44px; }
+  .treeLabel { min-height: 44px; height: auto; }
+}

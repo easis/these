@@ -2,7 +2,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { BrowseResponse, TheseList } from "@these/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import shellStyles from "../components/AppShell.module.css";
+import mediaTileStyles from "../components/MediaTile.module.css";
+import viewerStyles from "../components/Viewer.module.css";
 import { BrowsePage } from "./BrowsePage";
+import styles from "./BrowsePage.module.css";
 
 const mocks = vi.hoisted(() => ({
   api: vi.fn(),
@@ -110,7 +114,7 @@ describe("BrowsePage requests", () => {
     const drawer = screen.getByRole("dialog", { name: "Folders" });
     const close = screen.getByRole("button", { name: "Close folders" });
     expect(drawer).toHaveAttribute("aria-modal", "true");
-    expect(document.querySelector(".gallery-panel")).toHaveAttribute("inert");
+    expect(document.querySelector(`.${styles.galleryPanel}`)).toHaveAttribute("inert");
     expect(close).toHaveFocus();
 
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
@@ -176,10 +180,10 @@ describe("BrowsePage requests", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => compactViewport));
     mocks.api.mockResolvedValue(browseResponse("/media/trip", 0));
 
-    render(<div className="app-shell">
-      <header className="app-header"><button type="button">Theme</button></header>
-      <main className="app-content"><MemoryRouter initialEntries={["/browse?path=%2Fmedia%2Ftrip"]}><BrowsePage /></MemoryRouter></main>
-      <nav className="mobile-navigation"><a href="/lists">Lists navigation</a></nav>
+    render(<div className={shellStyles.appShell} data-app-shell>
+      <header className={shellStyles.appHeader}><button type="button">Theme</button></header>
+      <main className={shellStyles.appContent}><MemoryRouter initialEntries={["/browse?path=%2Fmedia%2Ftrip"]}><BrowsePage /></MemoryRouter></main>
+      <nav className={shellStyles.mobileNavigation}><a href="/lists">Lists navigation</a></nav>
     </div>);
     const trigger = screen.getByRole("button", { name: "Show browser options" });
     fireEvent.click(trigger);
@@ -187,9 +191,9 @@ describe("BrowsePage requests", () => {
     const sheet = screen.getByRole("dialog", { name: "Browser options" });
     const close = screen.getByRole("button", { name: "Close browser options" });
     expect(sheet).toHaveAttribute("aria-modal", "true");
-    expect(document.querySelector(".gallery-panel")).toHaveAttribute("inert");
-    expect(document.querySelector(".app-header")).toHaveAttribute("inert");
-    expect(document.querySelector(".mobile-navigation")).toHaveAttribute("inert");
+    expect(document.querySelector(`.${styles.galleryPanel}`)).toHaveAttribute("inert");
+    expect(document.querySelector(`.${shellStyles.appHeader}`)).toHaveAttribute("inert");
+    expect(document.querySelector(`.${shellStyles.mobileNavigation}`)).toHaveAttribute("inert");
     expect(close).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: /Hidden folders/ }));
@@ -199,8 +203,8 @@ describe("BrowsePage requests", () => {
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Browser options" })).not.toBeInTheDocument();
-    expect(document.querySelector(".app-header")).not.toHaveAttribute("inert");
-    expect(document.querySelector(".mobile-navigation")).not.toHaveAttribute("inert");
+    expect(document.querySelector(`.${shellStyles.appHeader}`)).not.toHaveAttribute("inert");
+    expect(document.querySelector(`.${shellStyles.mobileNavigation}`)).not.toHaveAttribute("inert");
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
@@ -262,7 +266,7 @@ describe("BrowsePage requests", () => {
 
     expect(screen.getByText("old.jpg")).toBeInTheDocument();
     expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
-    expect(document.querySelector(".gallery-scroll")).toHaveAttribute("aria-busy", "true");
+    expect(document.querySelector(`.${styles.galleryScroll}`)).toHaveAttribute("aria-busy", "true");
 
     filtered.resolve(browseResponse("/media", 1, { media: [mediaEntry("/media/new.jpg")] }));
     expect(await screen.findByText("new.jpg")).toBeInTheDocument();
@@ -329,17 +333,17 @@ describe("BrowsePage requests", () => {
 
     const { rerender } = render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     expect(await screen.findByText("photo.jpg")).toBeInTheDocument();
-    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-selected");
+    expect(screen.getByText("photo.jpg").closest(`.${mediaTileStyles.mediaTile}`)).toHaveClass(mediaTileStyles.selected!);
 
     mocks.activeList = secondList;
     rerender(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     await waitFor(() => expect(requests).toBe(2));
     expect(screen.getByText("photo.jpg")).toBeInTheDocument();
-    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-none");
+    expect(screen.getByText("photo.jpg").closest(`.${mediaTileStyles.mediaTile}`)).not.toHaveClass(mediaTileStyles.selected!, mediaTileStyles.maybe!);
     expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
 
     revalidated.resolve(browseResponse("/media", 1, { media: [{ ...mediaEntry("/media/photo.jpg"), status: "maybe" }] }));
-    await waitFor(() => expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-maybe"));
+    await waitFor(() => expect(screen.getByText("photo.jpg").closest(`.${mediaTileStyles.mediaTile}`)).toHaveClass(mediaTileStyles.maybe!));
   });
 
   it("sends the combined search to the backend and keeps server pagination", async () => {
@@ -453,7 +457,7 @@ describe("BrowsePage requests", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
 
     const viewer = screen.getByRole("dialog", { name: "first.jpg" });
-    expect(within(viewer).getByText("Keepers", { selector: ".viewer-context-chip" })).toBeInTheDocument();
+    expect(within(viewer).getByText("Keepers")).toBeInTheDocument();
     expect(within(viewer).queryByText("Active: Keepers")).not.toBeInTheDocument();
   });
 
@@ -465,7 +469,7 @@ describe("BrowsePage requests", () => {
 
     const viewer = screen.getByRole("dialog", { name: "first.jpg" });
     expect(within(viewer).queryByText("Classification unavailable")).not.toBeInTheDocument();
-    expect(viewer.querySelector(".viewer-context-chip")).not.toBeInTheDocument();
+    expect(viewer.querySelector(`.${viewerStyles.contextChip}`)).not.toBeInTheDocument();
   });
 
   it("continues prefetching when a page has no available media", async () => {
@@ -637,11 +641,11 @@ describe("BrowsePage requests", () => {
     const normal = await screen.findByRole("button", { name: /^Normal$/ });
     const favorite = screen.getByRole("button", { name: /^Favorite folder$/ });
     const hidden = screen.getByRole("button", { name: /^Hidden folder$/ });
-    expect(normal.querySelector(".folder-statuses")).not.toBeInTheDocument();
-    expect(favorite.querySelector(".folder-statuses .is-favorite")).toBeInTheDocument();
-    expect(hidden.querySelector(".folder-statuses .is-hidden")).toBeInTheDocument();
-    expect(within(favorite.closest<HTMLElement>(".folder-item")!).getByRole("button", { name: "Remove favorite" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(hidden.closest<HTMLElement>(".folder-item")!).getByRole("button", { name: "Unhide folder" })).toBeInTheDocument();
+    expect(normal.querySelector(`.${styles.folderStatuses}`)).not.toBeInTheDocument();
+    expect(favorite.querySelector(`.${styles.folderStatuses} .${styles.favorite}`)).toBeInTheDocument();
+    expect(hidden.querySelector(`.${styles.folderStatuses} .${styles.hidden}`)).toBeInTheDocument();
+    expect(within(favorite.closest<HTMLElement>(`.${styles.folderItem}`)!).getByRole("button", { name: "Remove favorite" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(hidden.closest<HTMLElement>(`.${styles.folderItem}`)!).getByRole("button", { name: "Unhide folder" })).toBeInTheDocument();
   });
 
   it("updates and restores a subfolder favorite indicator optimistically", async () => {
@@ -653,16 +657,16 @@ describe("BrowsePage requests", () => {
     });
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
-    const folder = (await screen.findByRole("button", { name: /^Photos$/ })).closest<HTMLElement>(".folder-item")!;
-    expect(folder.querySelector(".folder-statuses")).not.toBeInTheDocument();
+    const folder = (await screen.findByRole("button", { name: /^Photos$/ })).closest<HTMLElement>(`.${styles.folderItem}`)!;
+    expect(folder.querySelector(`.${styles.folderStatuses}`)).not.toBeInTheDocument();
 
     fireEvent.click(within(folder).getByRole("button", { name: "Favorite" }));
-    expect(folder.querySelector(".folder-statuses .is-favorite")).toBeInTheDocument();
+    expect(folder.querySelector(`.${styles.folderStatuses} .${styles.favorite}`)).toBeInTheDocument();
     expect(within(folder).getByRole("button", { name: "Remove favorite" })).toBeDisabled();
 
     await act(async () => update.reject(new Error("Could not save the favorite.")));
     expect(await screen.findByText("Could not save the favorite.")).toBeInTheDocument();
-    expect(folder.querySelector(".folder-statuses")).not.toBeInTheDocument();
+    expect(folder.querySelector(`.${styles.folderStatuses}`)).not.toBeInTheDocument();
     expect(within(folder).getByRole("button", { name: "Favorite" })).not.toBeDisabled();
   });
 
@@ -754,12 +758,12 @@ describe("BrowsePage requests", () => {
     });
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
-    const firstFolder = (await screen.findByText(firstName)).closest<HTMLElement>(".folder-item")!;
+    const firstFolder = (await screen.findByText(firstName)).closest<HTMLElement>(`.${styles.folderItem}`)!;
     fireEvent.click(within(firstFolder).getByRole("button", { name: "Edit alias" }));
     fireEvent.change(screen.getByRole("textbox", { name: `Alias for ${firstName}` }), { target: { value: firstName } });
     fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
 
-    expect(Array.from(document.querySelectorAll(".folder-open"), (element) => element.textContent)).toEqual([firstName, secondName]);
+    expect(Array.from(document.querySelectorAll(`.${styles.folderOpen}`), (element) => element.textContent)).toEqual([firstName, secondName]);
   });
 
   it("returns focus to search when a renamed folder leaves the active filter", async () => {
@@ -773,7 +777,7 @@ describe("BrowsePage requests", () => {
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     const search = screen.getByLabelText("Search files and folders");
     fireEvent.change(search, { target: { value: "Trips" } });
-    const folder = (await screen.findByText("Trips")).closest<HTMLElement>(".folder-item")!;
+    const folder = (await screen.findByText("Trips")).closest<HTMLElement>(`.${styles.folderItem}`)!;
     const editAlias = within(folder).getByRole("button", { name: "Edit alias" });
     editAlias.focus();
     fireEvent.click(editAlias);
@@ -864,7 +868,7 @@ describe("BrowsePage requests", () => {
     expect(await screen.findByText("photo.jpg")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mark selected" }));
 
-    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-selected");
+    expect(screen.getByText("photo.jpg").closest(`.${mediaTileStyles.mediaTile}`)).toHaveClass(mediaTileStyles.selected!);
     expect(screen.getByRole("button", { name: "Mark selected" })).toBeDisabled();
     expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
 
@@ -872,7 +876,7 @@ describe("BrowsePage requests", () => {
     expect(await screen.findByText("Could not classify the file.")).toBeInTheDocument();
     await waitFor(() => expect(mocks.api).toHaveBeenCalledTimes(2));
     expect(screen.getByText("Could not classify the file.")).toBeInTheDocument();
-    expect(screen.getByText("photo.jpg").closest(".media-tile")).toHaveClass("state-none");
+    expect(screen.getByText("photo.jpg").closest(`.${mediaTileStyles.mediaTile}`)).not.toHaveClass(mediaTileStyles.selected!, mediaTileStyles.maybe!);
     expect(screen.getByRole("button", { name: "Mark selected" })).not.toBeDisabled();
   });
 
@@ -884,7 +888,7 @@ describe("BrowsePage requests", () => {
 
     expect(await screen.findByRole("button", { name: "Hide current folder" })).toBeDisabled();
     const unhide = screen.getByRole("button", { name: "Unhide folder" });
-    expect(unhide.closest(".folder-item")).toHaveClass("is-hidden");
+    expect(unhide.closest(`.${styles.folderItem}`)).toHaveClass(styles.hidden!);
     fireEvent.click(unhide);
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/folder-metadata", expect.objectContaining({
       body: JSON.stringify({ path: "/media/hidden", hidden: false }),

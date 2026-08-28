@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { AudioStreamMetadata, MediaMetadataResponse, VideoStreamMetadata } from "@these/shared";
+import styles from "./Viewer.module.css";
 
 interface MediaDetailsPanelProps {
   loading: boolean;
@@ -10,8 +11,8 @@ interface MediaDetailsPanelProps {
 
 export function MediaDetailsPanel({ loading, error, metadata, onRetry }: MediaDetailsPanelProps) {
   return (
-    <aside id="viewer-details" className="viewer-details" aria-label="Technical details" aria-busy={loading}>
-      <div className="viewer-details-heading">
+    <aside id="viewer-details" className={styles.viewerDetails} aria-label="Technical details" aria-busy={loading}>
+      <div className={styles.detailsHeading}>
         <div><span>Details</span><small>Technical metadata</small></div>
       </div>
       {loading ? <DetailsLoading /> : error ? <DetailsError error={error} onRetry={onRetry} /> : metadata ? <DetailsContent metadata={metadata} /> : null}
@@ -20,11 +21,11 @@ export function MediaDetailsPanel({ loading, error, metadata, onRetry }: MediaDe
 }
 
 function DetailsLoading() {
-  return <div className="viewer-details-message"><span className="details-pulse" />Reading file metadata…</div>;
+  return <div className={styles.detailsMessage}><span className={styles.detailsPulse} />Reading file metadata…</div>;
 }
 
 function DetailsError({ error, onRetry }: { error: string; onRetry: () => void }) {
-  return <div className="viewer-details-error"><strong>Could not load details.</strong><p>{error}</p><button type="button" onClick={onRetry}>Retry</button></div>;
+  return <div className={styles.detailsError}><strong>Could not load details.</strong><p>{error}</p><button type="button" onClick={onRetry}>Retry</button></div>;
 }
 
 function DetailsContent({ metadata }: { metadata: MediaMetadataResponse }) {
@@ -35,11 +36,11 @@ function DetailsContent({ metadata }: { metadata: MediaMetadataResponse }) {
   const summary = [format?.toUpperCase(), dimensions, formatBytes(metadata.file.size)].filter(Boolean).join(" · ");
   const capture = metadata.capture;
   const location = metadata.location;
-  return <div className="viewer-details-scroll">
-    <p className="details-signature">{summary}</p>
-    {metadata.warnings.length ? <div className="details-warning" role="status">{metadata.warnings.join(" ")}</div> : null}
+  return <div className={styles.detailsScroll}>
+    <p className={styles.detailsSignature}>{summary}</p>
+    {metadata.warnings.length ? <div className={styles.detailsWarning} role="status">{metadata.warnings.join(" ")}</div> : null}
     <DetailSection title="File">
-      <DetailRow label="Location" value={<span className="details-path">{metadata.file.rootLabel} / {metadata.file.relativePath}</span>} />
+      <DetailRow label="Location" value={<span className={styles.detailsPath}>{metadata.file.rootLabel} / {metadata.file.relativePath}</span>} />
       <DetailRow label="Type" value={[metadata.file.extension.toUpperCase(), metadata.file.mimeType].filter(Boolean).join(" · ")} />
       <DetailRow label="Size" value={formatBytes(metadata.file.size)} />
       <DetailRow label="Modified" value={formatFileDate(metadata.file.modifiedAt)} />
@@ -121,7 +122,7 @@ function AudioStreamSection({ stream }: { stream: AudioStreamMetadata }) {
 }
 
 function DetailSection({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="details-section"><h2>{title}</h2><dl>{children}</dl></section>;
+  return <section className={styles.detailsSection}><h2>{title}</h2><dl>{children}</dl></section>;
 }
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {

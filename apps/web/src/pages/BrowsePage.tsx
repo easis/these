@@ -9,7 +9,10 @@ import { MediaTile } from "../components/MediaTile";
 import { TextInputDialog } from "../components/TextInputDialog";
 import { Viewer } from "../components/Viewer";
 import { api, isAbortError, query } from "../lib/api";
+import { cx } from "../lib/cx";
 import { useApp } from "../state/app-context";
+import ui from "../styles/ui.module.css";
+import styles from "./BrowsePage.module.css";
 
 const compactViewportQuery = "(max-width: 720px) or ((max-width: 900px) and (max-height: 500px))";
 const panelFocusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -129,7 +132,7 @@ export function BrowsePage() {
     if (!mobilePanel) return;
     const panel = document.getElementById(mobilePanel === "folders" ? "folder-sidebar" : mobilePanel === "lists" ? "list-sidebar" : "browser-controls-panel");
     if (!panel) return;
-    const shell = panel.closest(".app-shell");
+    const shell = panel.closest("[data-app-shell]");
     const shellSiblings = shell
       ? Array.from(shell.children).filter((element): element is HTMLElement => element instanceof HTMLElement && !element.contains(panel))
       : [];
@@ -394,44 +397,44 @@ export function BrowsePage() {
   };
 
   return (
-    <div className="browser-layout">
+    <div className={styles.browserLayout}>
       {preferences.leftSidebarOpen ? <FolderTree currentPath={response?.path ?? requestedPath} hiddenOverrides={folderHiddenOverrides} modal={mobilePanel === "folders"} onClose={closeFolderPanelWithFocus} onNavigate={closeFolderAfterNavigation} /> : null}
-      <section className="gallery-panel" inert={Boolean(mobilePanel)}>
-        <div className="gallery-toolbar">
-          {!preferences.leftSidebarOpen ? <button ref={folderSidebarTrigger} className="icon-button browser-navigation-button" type="button" onClick={() => { setMobileControlsOpen(false); setPreferences({ leftSidebarOpen: true, ...(compactViewport ? { rightSidebarOpen: false } : {}) }); }} aria-controls="folder-sidebar" aria-expanded="false" aria-label="Show folder sidebar"><PanelLeftClose className="rotate-180" size={15} /></button> : null}
+      <section className={styles.galleryPanel} inert={Boolean(mobilePanel)}>
+        <div className={styles.galleryToolbar}>
+          {!preferences.leftSidebarOpen ? <button ref={folderSidebarTrigger} className={cx(ui.iconButton, styles.browserNavigationButton)} type="button" onClick={() => { setMobileControlsOpen(false); setPreferences({ leftSidebarOpen: true, ...(compactViewport ? { rightSidebarOpen: false } : {}) }); }} aria-controls="folder-sidebar" aria-expanded="false" aria-label="Show folder sidebar"><PanelLeftClose className="rotate-180" size={15} /></button> : null}
           <Breadcrumbs currentPath={response?.path ?? requestedPath} rootPath={response?.root.path} currentDisplayName={response?.currentFolder.displayName} onOpen={openFolder} />
           <span className="ml-auto" />
-          {!preferences.rightSidebarOpen ? <button ref={listSidebarTrigger} className="icon-button browser-navigation-button" type="button" onClick={() => { setMobileControlsOpen(false); setPreferences({ rightSidebarOpen: true, ...(compactViewport ? { leftSidebarOpen: false } : {}) }); }} aria-controls="list-sidebar" aria-expanded="false" aria-label="Show lists sidebar"><PanelRightClose className="rotate-180" size={15} /></button> : null}
-          {response?.currentFolder && !compactViewport ? <span className="desktop-current-folder-actions"><CurrentFolderActions folder={response.currentFolder} canHide={response.path !== response.root.path} pending={pendingFolderPaths.has(response.currentFolder.path)} onUpdate={updateFolder} onToggleHidden={toggleCurrentHidden} onEditAlias={editAlias} /></span> : null}
+          {!preferences.rightSidebarOpen ? <button ref={listSidebarTrigger} className={cx(ui.iconButton, styles.browserNavigationButton)} type="button" onClick={() => { setMobileControlsOpen(false); setPreferences({ rightSidebarOpen: true, ...(compactViewport ? { leftSidebarOpen: false } : {}) }); }} aria-controls="list-sidebar" aria-expanded="false" aria-label="Show lists sidebar"><PanelRightClose className="rotate-180" size={15} /></button> : null}
+          {response?.currentFolder && !compactViewport ? <span className={styles.desktopCurrentFolderActions}><CurrentFolderActions folder={response.currentFolder} canHide={response.path !== response.root.path} pending={pendingFolderPaths.has(response.currentFolder.path)} onUpdate={updateFolder} onToggleHidden={toggleCurrentHidden} onEditAlias={editAlias} /></span> : null}
         </div>
-        <div className="gallery-subtoolbar">
-          {preferences.leftSidebarOpen && !compactViewport ? <button className="icon-button desktop-browser-control" type="button" onClick={() => closeFolderPanel(false)} aria-controls="folder-sidebar" aria-expanded="true" title="Collapse folders" aria-label="Collapse folders"><PanelLeftClose size={15} /></button> : null}
-          <div className="search-control" role="search"><Search size={14} /><input ref={searchInput} value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search files and folders" aria-label="Search files and folders" />{filter ? <button className="search-clear" type="button" onClick={() => setFilter("")} aria-label="Clear search"><X size={13} /></button> : null}</div>
-          {!compactViewport ? <div className="media-kind-filters desktop-browser-control" role="group" aria-label="File types">
-            <button type="button" className={mediaKinds.includes("image") ? "is-active" : ""} aria-pressed={mediaKinds.includes("image")} onClick={() => toggleMediaKind("image")}><Image size={13} />Images</button>
-            <button type="button" className={mediaKinds.includes("video") ? "is-active" : ""} aria-pressed={mediaKinds.includes("video")} onClick={() => toggleMediaKind("video")}><Video size={13} />Videos</button>
+        <div className={styles.gallerySubtoolbar}>
+          {preferences.leftSidebarOpen && !compactViewport ? <button className={cx(ui.iconButton, styles.desktopBrowserControl)} type="button" onClick={() => closeFolderPanel(false)} aria-controls="folder-sidebar" aria-expanded="true" title="Collapse folders" aria-label="Collapse folders"><PanelLeftClose size={15} /></button> : null}
+          <div className={cx(ui.searchControl, styles.gallerySearch)} role="search"><Search size={14} /><input ref={searchInput} value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search files and folders" aria-label="Search files and folders" />{filter ? <button className={cx(ui.searchClear, styles.gallerySearchClear)} type="button" onClick={() => setFilter("")} aria-label="Clear search"><X size={13} /></button> : null}</div>
+          {!compactViewport ? <div className={cx(styles.mediaKindFilters, styles.desktopBrowserControl)} role="group" aria-label="File types">
+            <button type="button" className={mediaKinds.includes("image") ? styles.active : undefined} aria-pressed={mediaKinds.includes("image")} onClick={() => toggleMediaKind("image")}><Image size={13} />Images</button>
+            <button type="button" className={mediaKinds.includes("video") ? styles.active : undefined} aria-pressed={mediaKinds.includes("video")} onClick={() => toggleMediaKind("video")}><Video size={13} />Videos</button>
           </div> : null}
-          {!compactViewport ? <button className={`show-hidden-toggle desktop-browser-control ${preferences.showHidden ? "is-active" : ""}`} type="button" aria-pressed={preferences.showHidden} onClick={() => setPreferences({ showHidden: !preferences.showHidden })} title={preferences.showHidden ? "Hide hidden folders" : "Show hidden folders"}>
+          {!compactViewport ? <button className={cx(styles.showHiddenToggle, styles.desktopBrowserControl, preferences.showHidden && styles.active)} type="button" aria-pressed={preferences.showHidden} onClick={() => setPreferences({ showHidden: !preferences.showHidden })} title={preferences.showHidden ? "Hide hidden folders" : "Show hidden folders"}>
             {preferences.showHidden ? <Eye size={14} /> : <EyeOff size={14} />}<span>{preferences.showHidden ? "Hidden shown" : "Show hidden"}</span>
           </button> : null}
-          {!compactViewport ? <span className="desktop-browser-control ml-auto text-xs tabular-nums text-muted">{response ? `${response.totalMedia} media · ${response.folders.length} folders` : ""}</span> : null}
-          {!compactViewport ? <label className="size-control desktop-browser-control" title="Thumbnail size"><SlidersHorizontal size={14} /><input type="range" min="120" max="280" step="20" value={preferences.thumbnailSize} onChange={(event) => setPreferences({ thumbnailSize: Number(event.target.value) })} aria-label="Thumbnail size" /></label> : null}
-          {preferences.rightSidebarOpen && !compactViewport ? <button className="icon-button desktop-browser-control" type="button" onClick={() => closeListPanel(false)} aria-controls="list-sidebar" aria-expanded="true" title="Collapse lists" aria-label="Collapse lists"><PanelRightClose size={15} /></button> : null}
-          {compactViewport ? <button ref={mobileControlsTrigger} className="icon-button mobile-browser-control mobile-more-button" type="button" onClick={() => { setPreferences({ leftSidebarOpen: false, rightSidebarOpen: false }); setMobileControlsOpen(true); }} aria-controls="browser-controls-panel" aria-expanded={mobileControlsOpen} aria-label="Show browser options"><Ellipsis size={20} /></button> : null}
+          {!compactViewport ? <span className={cx(styles.desktopBrowserControl, "ml-auto text-xs tabular-nums text-muted")}>{response ? `${response.totalMedia} media · ${response.folders.length} folders` : ""}</span> : null}
+          {!compactViewport ? <label className={cx(styles.sizeControl, styles.desktopBrowserControl)} title="Thumbnail size"><SlidersHorizontal size={14} /><input type="range" min="120" max="280" step="20" value={preferences.thumbnailSize} onChange={(event) => setPreferences({ thumbnailSize: Number(event.target.value) })} aria-label="Thumbnail size" /></label> : null}
+          {preferences.rightSidebarOpen && !compactViewport ? <button className={cx(ui.iconButton, styles.desktopBrowserControl)} type="button" onClick={() => closeListPanel(false)} aria-controls="list-sidebar" aria-expanded="true" title="Collapse lists" aria-label="Collapse lists"><PanelRightClose size={15} /></button> : null}
+          {compactViewport ? <button ref={mobileControlsTrigger} className={cx(ui.iconButton, styles.mobileBrowserControl, styles.mobileMoreButton)} type="button" onClick={() => { setPreferences({ leftSidebarOpen: false, rightSidebarOpen: false }); setMobileControlsOpen(true); }} aria-controls="browser-controls-panel" aria-expanded={mobileControlsOpen} aria-label="Show browser options"><Ellipsis size={20} /></button> : null}
         </div>
-        {error && !aliasFolder ? <div className="inline-error">{error}</div> : null}
-        <div className="gallery-scroll" aria-busy={loading}>
+        {error && !aliasFolder ? <div className={ui.inlineError}>{error}</div> : null}
+        <div className={styles.galleryScroll} aria-busy={loading}>
           {response?.folders.length ? <FolderGrid folders={response.folders} pendingPaths={pendingFolderPaths} onOpen={openFolder} onUpdate={updateFolder} onEditAlias={editAlias} /> : null}
           {media.length ? <VirtualGallery media={media} size={preferences.thumbnailSize} activeList={Boolean(activeList)} pendingPaths={pendingMediaPaths} hasMore={Boolean(response?.hasMore)} loading={loading} onLoadMore={() => void loadMore()} onOpen={openViewer} onStatus={classify} />
-            : loading && !response ? <div className="empty-gallery">Opening folder…</div>
-              : filter && response?.folders.length === 0 ? <div className="empty-gallery">No files or folders match this search.</div>
-                : response?.folders.length === 0 ? <div className="empty-gallery">{mediaKinds.length === 1 ? `No ${mediaKinds[0] === "image" ? "images" : "videos"} in this folder.` : "No media in this folder."}</div>
+            : loading && !response ? <div className={styles.emptyGallery}>Opening folder…</div>
+              : filter && response?.folders.length === 0 ? <div className={styles.emptyGallery}>No files or folders match this search.</div>
+                : response?.folders.length === 0 ? <div className={styles.emptyGallery}>{mediaKinds.length === 1 ? `No ${mediaKinds[0] === "image" ? "images" : "videos"} in this folder.` : "No media in this folder."}</div>
                   : null}
         </div>
       </section>
       {preferences.rightSidebarOpen ? <ListSidebar modal={mobilePanel === "lists"} onClose={closeListPanelWithFocus} onSelection={closeListAfterSelection} /> : null}
       {compactViewport && mobileControlsOpen ? <MobileBrowserControls folder={response?.currentFolder ?? null} canHide={Boolean(response && response.path !== response.root.path)} pending={Boolean(response && pendingFolderPaths.has(response.currentFolder.path))} mediaKinds={mediaKinds} showHidden={preferences.showHidden} thumbnailSize={preferences.thumbnailSize} onClose={() => { pendingPanelFocus.current = "controls"; setMobileControlsOpen(false); }} onToggleKind={toggleMediaKind} onShowHidden={(showHidden) => setPreferences({ showHidden })} onThumbnailSize={(thumbnailSize) => setPreferences({ thumbnailSize })} onUpdateFolder={updateFolder} onToggleHidden={toggleCurrentHidden} onEditAlias={editAlias} /> : null}
-      {mobilePanel ? <button className="panel-backdrop" type="button" tabIndex={-1} onClick={closeOpenMobilePanel} aria-label="Close navigation panel" /> : null}
+      {mobilePanel ? <button className={styles.panelBackdrop} type="button" tabIndex={-1} onClick={closeOpenMobilePanel} aria-label="Close navigation panel" /> : null}
       {aliasFolder ? <TextInputDialog title="Edit folder alias" label={`Alias for ${aliasFolder.name}`} initialValue={aliasFolder.displayName === aliasFolder.name ? "" : aliasFolder.displayName} description="Leave this empty to use the folder name." maxLength={160} submitLabel="Save alias" allowEmpty error={mutationError} fallbackFocusRef={searchInput} onValueChange={() => setMutationError(null)} onSubmit={(alias) => updateFolder(aliasFolder, { alias })} onClose={() => { setAliasFolder(null); setMutationError(null); }} /> : null}
       {viewerIndex !== null ? <Viewer items={media} index={viewerIndex} classificationContext={activeList?.name ?? null} classificationEnabled={Boolean(activeList)} classificationPending={pendingMediaPaths.has(media[viewerIndex]?.path ?? "")} hasNext={viewerIndex < media.length - 1 || Boolean(response?.hasMore)} nextPending={viewerAdvancePending} onIndex={setViewerIndex} onNext={() => void advanceViewer()} onClose={closeViewer} onStatus={(status) => void classify(media[viewerIndex]!, status)} /> : null}
     </div>
@@ -444,24 +447,24 @@ function Breadcrumbs({ currentPath, rootPath, currentDisplayName, onOpen }: { cu
   const crumbs = [{ label: rootPath.split("/").pop() ?? rootPath, path: rootPath }];
   for (let index = 0; index < relative.length; index += 1) crumbs.push({ label: relative[index]!, path: `${rootPath}/${relative.slice(0, index + 1).join("/")}` });
   if (currentDisplayName) crumbs[crumbs.length - 1]!.label = currentDisplayName;
-  return <nav className="breadcrumbs" aria-label="Folder path">{crumbs.map((crumb, index) => <span key={crumb.path}>{index ? <ChevronRight size={12} /> : null}<button type="button" onClick={() => onOpen(crumb.path)}>{crumb.label}</button></span>)}</nav>;
+  return <nav className={styles.breadcrumbs} aria-label="Folder path">{crumbs.map((crumb, index) => <span key={crumb.path}>{index ? <ChevronRight size={12} /> : null}<button type="button" onClick={() => onOpen(crumb.path)}>{crumb.label}</button></span>)}</nav>;
 }
 
 function MobileBrowserControls({ folder, canHide, pending, mediaKinds, showHidden, thumbnailSize, onClose, onToggleKind, onShowHidden, onThumbnailSize, onUpdateFolder, onToggleHidden, onEditAlias }: { folder: FolderEntry | null; canHide: boolean; pending: boolean; mediaKinds: MediaKind[]; showHidden: boolean; thumbnailSize: number; onClose: () => void; onToggleKind: (kind: MediaKind) => void; onShowHidden: (showHidden: boolean) => void; onThumbnailSize: (thumbnailSize: number) => void; onUpdateFolder: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void>; onEditAlias: (folder: FolderEntry) => void }) {
   return (
-    <aside id="browser-controls-panel" className="browser-controls-panel" role="dialog" aria-modal="true" aria-label="Browser options" tabIndex={-1}>
-      <div className="browser-controls-heading"><span>Browser options</span><button className="icon-button" type="button" onClick={onClose} aria-label="Close browser options"><X size={19} /></button></div>
-      <div className="browser-controls-scroll">
-        <section className="browser-controls-section">
+    <aside id="browser-controls-panel" className={styles.browserControlsPanel} role="dialog" aria-modal="true" aria-label="Browser options" tabIndex={-1}>
+      <div className={styles.browserControlsHeading}><span>Browser options</span><button className={cx(ui.iconButton, styles.browserControlsClose)} type="button" onClick={onClose} aria-label="Close browser options"><X size={19} /></button></div>
+      <div className={styles.browserControlsScroll}>
+        <section className={styles.browserControlsSection}>
           <h2>Show in gallery</h2>
-          <div className="mobile-kind-filters" role="group" aria-label="File types">
-            <button type="button" className={mediaKinds.includes("image") ? "is-active" : ""} aria-pressed={mediaKinds.includes("image")} onClick={() => onToggleKind("image")}><Image size={18} /><span>Images</span></button>
-            <button type="button" className={mediaKinds.includes("video") ? "is-active" : ""} aria-pressed={mediaKinds.includes("video")} onClick={() => onToggleKind("video")}><Video size={18} /><span>Videos</span></button>
+          <div className={styles.mobileKindFilters} role="group" aria-label="File types">
+            <button type="button" className={mediaKinds.includes("image") ? styles.active : undefined} aria-pressed={mediaKinds.includes("image")} onClick={() => onToggleKind("image")}><Image size={18} /><span>Images</span></button>
+            <button type="button" className={mediaKinds.includes("video") ? styles.active : undefined} aria-pressed={mediaKinds.includes("video")} onClick={() => onToggleKind("video")}><Video size={18} /><span>Videos</span></button>
           </div>
-          <button className={`mobile-option-row ${showHidden ? "is-active" : ""}`} type="button" aria-pressed={showHidden} onClick={() => onShowHidden(!showHidden)}>{showHidden ? <Eye size={18} /> : <EyeOff size={18} />}<span><strong>Hidden folders</strong><small>{showHidden ? "Shown in navigation" : "Hidden from navigation"}</small></span></button>
-          <label className="mobile-size-control"><span><SlidersHorizontal size={18} /><strong>Thumbnail size</strong></span><input type="range" min="120" max="280" step="20" value={thumbnailSize} onChange={(event) => onThumbnailSize(Number(event.target.value))} aria-label="Thumbnail size" /><output>{thumbnailSize}px</output></label>
+          <button className={cx(styles.mobileOptionRow, showHidden && styles.active)} type="button" aria-pressed={showHidden} onClick={() => onShowHidden(!showHidden)}>{showHidden ? <Eye size={18} /> : <EyeOff size={18} />}<span><strong>Hidden folders</strong><small>{showHidden ? "Shown in navigation" : "Hidden from navigation"}</small></span></button>
+          <label className={styles.mobileSizeControl}><span><SlidersHorizontal size={18} /><strong>Thumbnail size</strong></span><input type="range" min="120" max="280" step="20" value={thumbnailSize} onChange={(event) => onThumbnailSize(Number(event.target.value))} aria-label="Thumbnail size" /><output>{thumbnailSize}px</output></label>
         </section>
-        {folder ? <section className="browser-controls-section"><h2>Current folder</h2><p className="browser-current-folder-name" title={folder.path}>{folder.displayName}</p><CurrentFolderActions expanded folder={folder} canHide={canHide} pending={pending} onUpdate={onUpdateFolder} onToggleHidden={onToggleHidden} onEditAlias={onEditAlias} /></section> : null}
+        {folder ? <section className={styles.browserControlsSection}><h2>Current folder</h2><p className={styles.currentFolderName} title={folder.path}>{folder.displayName}</p><CurrentFolderActions expanded folder={folder} canHide={canHide} pending={pending} onUpdate={onUpdateFolder} onToggleHidden={onToggleHidden} onEditAlias={onEditAlias} /></section> : null}
       </div>
     </aside>
   );
@@ -469,33 +472,33 @@ function MobileBrowserControls({ folder, canHide, pending, mediaKinds, showHidde
 
 function CurrentFolderActions({ folder, canHide, pending, expanded = false, onUpdate, onToggleHidden, onEditAlias }: { folder: FolderEntry; canHide: boolean; pending: boolean; expanded?: boolean; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onToggleHidden: (folder: FolderEntry) => Promise<void>; onEditAlias: (folder: FolderEntry) => void }) {
   return (
-    <div className={`current-folder-actions ${expanded ? "is-expanded" : ""}`} role="group" aria-label="Current folder actions" aria-busy={pending}>
-      <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"} aria-label={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"}><Star size={expanded ? 17 : 13} fill={folder.favorite ? "currentColor" : "none"} />{expanded ? <span>{folder.favorite ? "Favorited" : "Favorite"}</span> : null}</button>
+    <div className={cx(styles.currentFolderActions, expanded && styles.expanded)} role="group" aria-label="Current folder actions" aria-busy={pending}>
+      <button type="button" disabled={pending} className={folder.favorite ? styles.favorite : undefined} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"} aria-label={folder.favorite ? "Remove current folder from favorites" : "Add current folder to favorites"}><Star size={expanded ? 17 : 13} fill={folder.favorite ? "currentColor" : "none"} />{expanded ? <span>{folder.favorite ? "Favorited" : "Favorite"}</span> : null}</button>
       <button type="button" disabled={pending} onClick={() => onEditAlias(folder)} title="Edit current folder alias" aria-label="Edit current folder alias"><Pencil size={expanded ? 17 : 13} />{expanded ? <span>Edit alias</span> : null}</button>
-      <button type="button" className={folder.hidden ? "is-hidden" : ""} disabled={pending || (!canHide && !folder.hidden)} aria-pressed={folder.hidden} onClick={() => void onToggleHidden(folder)} title={!canHide && !folder.hidden ? "The media root cannot be hidden here" : folder.hidden ? "Unhide current folder" : "Hide current folder"} aria-label={folder.hidden ? "Unhide current folder" : "Hide current folder"}>{folder.hidden ? <Eye size={expanded ? 17 : 13} /> : <EyeOff size={expanded ? 17 : 13} />}{expanded ? <span>{folder.hidden ? "Unhide" : "Hide"}</span> : null}</button>
+      <button type="button" className={folder.hidden ? styles.hidden : undefined} disabled={pending || (!canHide && !folder.hidden)} aria-pressed={folder.hidden} onClick={() => void onToggleHidden(folder)} title={!canHide && !folder.hidden ? "The media root cannot be hidden here" : folder.hidden ? "Unhide current folder" : "Hide current folder"} aria-label={folder.hidden ? "Unhide current folder" : "Hide current folder"}>{folder.hidden ? <Eye size={expanded ? 17 : 13} /> : <EyeOff size={expanded ? 17 : 13} />}{expanded ? <span>{folder.hidden ? "Unhide" : "Hide"}</span> : null}</button>
     </div>
   );
 }
 
 function FolderGrid({ folders, pendingPaths, onOpen, onUpdate, onEditAlias }: { folders: FolderEntry[]; pendingPaths: Set<string>; onOpen: (path: string) => void; onUpdate: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>; onEditAlias: (folder: FolderEntry) => void }) {
   return (
-    <section className="folder-grid" aria-label="Folders in this directory">
+    <section className={styles.folderGrid} aria-label="Folders in this directory">
       {folders.map((folder) => {
         const pending = pendingPaths.has(folder.path);
         return (
-          <div className={`folder-item ${folder.hidden ? "is-hidden" : ""}`} key={folder.path} aria-busy={pending}>
-            <button type="button" className="folder-open" onClick={() => onOpen(folder.path)} title={folder.path} aria-label={folder.displayName}>
+          <div className={cx(styles.folderItem, folder.hidden && styles.hidden)} key={folder.path} aria-busy={pending}>
+            <button type="button" className={styles.folderOpen} onClick={() => onOpen(folder.path)} title={folder.path} aria-label={folder.displayName}>
               <Folder size={17} fill="currentColor" fillOpacity={0.08} />
               <span className="truncate">{folder.displayName}</span>
-              {folder.favorite || folder.hidden ? <span className="folder-statuses" aria-hidden="true">
-                {folder.favorite ? <Star className="is-favorite" size={13} fill="currentColor" /> : null}
-                {folder.hidden ? <EyeOff className="is-hidden" size={13} /> : null}
+              {folder.favorite || folder.hidden ? <span className={styles.folderStatuses} aria-hidden="true">
+                {folder.favorite ? <Star className={styles.favorite} size={13} fill="currentColor" /> : null}
+                {folder.hidden ? <EyeOff className={styles.hidden} size={13} /> : null}
               </span> : null}
             </button>
-            <span className="folder-actions">
-              <button type="button" disabled={pending} className={folder.favorite ? "is-favorite" : ""} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
+            <span className={styles.folderActions}>
+              <button type="button" disabled={pending} className={folder.favorite ? styles.favorite : undefined} aria-pressed={folder.favorite} onClick={() => void onUpdate(folder, { favorite: !folder.favorite })} title={folder.favorite ? "Remove favorite" : "Favorite"} aria-label={folder.favorite ? "Remove favorite" : "Favorite"}><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
               <button type="button" disabled={pending} onClick={() => onEditAlias(folder)} title="Edit alias" aria-label="Edit alias"><Pencil size={14} /></button>
-              <button type="button" disabled={pending} className={folder.hidden ? "is-hidden" : ""} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+              <button type="button" disabled={pending} className={folder.hidden ? styles.hidden : undefined} onClick={() => void onUpdate(folder, { hidden: !folder.hidden })} title={folder.hidden ? "Unhide folder" : "Hide folder subtree"} aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}>{folder.hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
             </span>
           </div>
         );
@@ -524,7 +527,7 @@ function VirtualGallery({ media, size, activeList, pendingPaths, hasMore, loadin
   const rowCount = Math.ceil(media.length / columns);
   const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => parentRef.current, estimateSize: () => size + 32 + gap, overscan: 3 });
   return (
-    <div ref={parentRef} className="virtual-gallery-scroll">
+    <div ref={parentRef} className={styles.virtualGalleryScroll}>
       <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize() + (hasMore ? 46 : 8)}px` }}>
         {virtualizer.getVirtualItems().map((row) => (
           <div key={row.key} className="absolute left-0 top-0 grid w-full" style={{ transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: `${gap}px`, height: `${row.size - gap}px` }}>
@@ -534,7 +537,7 @@ function VirtualGallery({ media, size, activeList, pendingPaths, hasMore, loadin
             })}
           </div>
         ))}
-        {hasMore ? <button className="load-more" style={{ top: virtualizer.getTotalSize() }} type="button" disabled={loading} onClick={onLoadMore}>{loading ? "Loading…" : "Load more"}</button> : null}
+        {hasMore ? <button className={styles.loadMore} style={{ top: virtualizer.getTotalSize() }} type="button" disabled={loading} onClick={onLoadMore}>{loading ? "Loading…" : "Load more"}</button> : null}
       </div>
     </div>
   );
