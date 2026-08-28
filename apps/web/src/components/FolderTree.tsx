@@ -1,7 +1,8 @@
 import { ChevronRight, Folder, FolderHeart, HardDrive, PanelLeftClose } from "lucide-react";
-import { memo, useCallback, useEffect, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { BrowseResponse, FolderEntry } from "@these/shared";
+import { applyFolderPatch, FolderActionMenu, type FolderActionMenuClasses, type FolderPatch } from "./FolderActionMenu";
 import { api, isAbortError, query } from "../lib/api";
 import { cx } from "../lib/cx";
 import { folderSidebarWidth } from "../lib/preferences";
@@ -11,20 +12,47 @@ import styles from "./FolderTree.module.css";
 import sidebar from "./Sidebar.module.css";
 import { useSidebarResize } from "./useSidebarResize";
 
+const treeFolderMenuClasses: FolderActionMenuClasses = {
+  control: styles.treeMenuControl,
+  controlOpen: styles.treeMenuControlOpen,
+  trigger: styles.treeMenuTrigger,
+  open: styles.open,
+  menu: styles.treeMenu,
+  above: styles.above,
+};
+
+interface FolderTreeActions {
+  onUpdateFolder?: (folder: FolderEntry, patch: FolderPatch) => Promise<boolean>;
+  onEditAlias?: (folder: FolderEntry, onUpdated?: (alias: string | null) => void) => void;
+  onEditCollections?: (folder: FolderEntry) => void;
+}
+
 interface TreeNodeProps {
   folder: FolderEntry;
   depth: number;
   currentPath: string | null;
   showHidden: boolean;
   hiddenOverrides: ReadonlyMap<string, boolean>;
+  rootPaths: ReadonlySet<string>;
+  branchId: string;
+  openMenuId: string | null;
+  onOpenMenu: (menuId: string | null) => void;
   onOpen: (path: string) => void;
+  actions: FolderTreeActions;
 }
 
-const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden, hiddenOverrides, onOpen }: TreeNodeProps) {
+const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden, hiddenOverrides, rootPaths, branchId, openMenuId, onOpenMenu, onOpen, actions }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(currentPath?.startsWith(`${folder.path}/`) ?? false);
   const [children, setChildren] = useState<FolderEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const hidden = isEffectivelyHidden(folder.path, folder.hidden, hiddenOverrides);
+  const [pending, setPending] = useState(false);
+  const [visibleFolder, setVisibleFolder] = useState(folder);
+  const menuId = `${branchId}:${folder.path}`;
+  const hidden = isEffectivelyHidden(visibleFolder.path, visibleFolder.hidden, hiddenOverrides);
+
+  useEffect(() => {
+    setVisibleFolder(folder);
+  }, [folder.displayName, folder.favorite, folder.hidden, folder.name, folder.path]);
 
   useEffect(() => {
     if (currentPath?.startsWith(`${folder.path}/`)) setExpanded(true);
@@ -36,7 +64,10 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
     setLoading(true);
     void api<BrowseResponse>(`/api/browse?${query({ path: folder.path, limit: 1, showHidden })}`, { signal: controller.signal })
       .then((response) => {
-        if (!controller.signal.aborted) setChildren(response.folders);
+        if (!controller.signal.aborted) {
+          setVisibleFolder(response.currentFolder);
+          setChildren(response.folders);
+        }
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted && !isAbortError(error)) setChildren([]);
@@ -47,23 +78,48 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
     return () => controller.abort();
   }, [expanded, folder.path, showHidden]);
 
+  const updateFolder = async (_folder: FolderEntry, patch: FolderPatch) => {
+    if (!actions.onUpdateFolder || pending) return false;
+    const previous = visibleFolder;
+    setVisibleFolder((current) => applyFolderPatch(current, patch));
+    setPending(true);
+    const updated = await actions.onUpdateFolder(visibleFolder, patch);
+    if (!updated) setVisibleFolder(previous);
+    setPending(false);
+    return updated;
+  };
+  const editAlias = () => actions.onEditAlias?.(visibleFolder, (alias) => setVisibleFolder((current) => applyFolderPatch(current, { alias })));
+  const hasActions = Boolean(actions.onUpdateFolder && actions.onEditAlias && actions.onEditCollections);
+
   return (
     <div role="treeitem" aria-expanded={expanded}>
       <div className={cx(styles.treeRow, currentPath === folder.path && styles.current, hidden && styles.hidden)} style={{ paddingLeft: `${6 + depth * 14}px` }}>
-        <button type="button" className={styles.treeToggle} onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} ${folder.displayName}`}>
+        <button type="button" className={styles.treeToggle} onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} ${visibleFolder.displayName}`}>
           <ChevronRight className={expanded ? "rotate-90" : ""} size={13} />
         </button>
-        <button type="button" className={styles.treeLabel} onClick={() => onOpen(folder.path)} title={folder.path}>
+        <button type="button" className={styles.treeLabel} onClick={() => onOpen(visibleFolder.path)} title={visibleFolder.path}>
           <Folder size={14} fill="currentColor" fillOpacity={0.08} />
-          <span className="truncate">{folder.displayName}</span>
+          <span className="truncate">{visibleFolder.displayName}</span>
         </button>
+        {hasActions ? <FolderActionMenu
+          folder={visibleFolder}
+          pending={pending}
+          open={openMenuId === menuId}
+          classes={treeFolderMenuClasses}
+          boundarySelector="[data-folder-tree-boundary]"
+          canHide={!rootPaths.has(visibleFolder.path)}
+          onOpenChange={(open) => onOpenMenu(open ? menuId : null)}
+          onUpdate={updateFolder}
+          onEditAlias={editAlias}
+          onEditCollections={(target) => actions.onEditCollections?.(target)}
+        /> : null}
       </div>
       {expanded ? (
         <div role="group">
           {loading ? <div className={styles.treeNote} style={{ paddingLeft: `${28 + depth * 14}px` }}>Loading…</div> : null}
           {children?.map((child) => {
             const childHidden = isEffectivelyHidden(child.path, child.hidden, hiddenOverrides);
-            return showHidden || !childHidden ? <TreeNode key={child.path} folder={child} depth={depth + 1} currentPath={currentPath} showHidden={showHidden} hiddenOverrides={hiddenOverrides} onOpen={onOpen} /> : null;
+            return showHidden || !childHidden ? <TreeNode key={child.path} folder={child} depth={depth + 1} currentPath={currentPath} showHidden={showHidden} hiddenOverrides={hiddenOverrides} rootPaths={rootPaths} branchId={branchId} openMenuId={openMenuId} onOpenMenu={onOpenMenu} onOpen={onOpen} actions={actions} /> : null;
           })}
         </div>
       ) : null}
@@ -71,11 +127,61 @@ const TreeNode = memo(function TreeNode({ folder, depth, currentPath, showHidden
   );
 });
 
+function FavoriteFolderRow({ folder, hiddenOverrides, rootPaths, menuId, openMenuId, onOpenMenu, onOpen, actions }: { folder: FolderEntry; hiddenOverrides: ReadonlyMap<string, boolean>; rootPaths: ReadonlySet<string>; menuId: string; openMenuId: string | null; onOpenMenu: (menuId: string | null) => void; onOpen: (path: string) => void; actions: FolderTreeActions }) {
+  const [visibleFolder, setVisibleFolder] = useState(folder);
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    setVisibleFolder(folder);
+  }, [folder.displayName, folder.favorite, folder.hidden, folder.name, folder.path]);
+
+  const updateFolder = async (_folder: FolderEntry, patch: FolderPatch) => {
+    if (!actions.onUpdateFolder || pending) return false;
+    const previous = visibleFolder;
+    setVisibleFolder((current) => applyFolderPatch(current, patch));
+    setPending(true);
+    const updated = await actions.onUpdateFolder(visibleFolder, patch);
+    if (!updated) setVisibleFolder(previous);
+    setPending(false);
+    return updated;
+  };
+  const editAlias = () => actions.onEditAlias?.(visibleFolder, (alias) => setVisibleFolder((current) => applyFolderPatch(current, { alias })));
+  if (!visibleFolder.favorite) return null;
+  return (
+    <div className={styles.favoriteItem}>
+      <button className={cx(styles.favoriteRow, isEffectivelyHidden(visibleFolder.path, visibleFolder.hidden, hiddenOverrides) && styles.hidden)} type="button" onClick={() => onOpen(visibleFolder.path)} title={visibleFolder.path}>
+        <span className="truncate">{visibleFolder.displayName}</span>
+      </button>
+      <FolderActionMenu
+        folder={visibleFolder}
+        pending={pending}
+        open={openMenuId === menuId}
+        classes={treeFolderMenuClasses}
+        boundarySelector="[data-folder-tree-boundary]"
+        canHide={!rootPaths.has(visibleFolder.path)}
+        onOpenChange={(open) => onOpenMenu(open ? menuId : null)}
+        onUpdate={updateFolder}
+        onEditAlias={editAlias}
+        onEditCollections={(target) => actions.onEditCollections?.(target)}
+      />
+    </div>
+  );
+}
+
 const emptyHiddenOverrides = new Map<string, boolean>();
 
-export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides, onClose, onNavigate, modal = false }: { currentPath: string | null; hiddenOverrides?: ReadonlyMap<string, boolean>; onClose?: () => void; onNavigate?: () => void; modal?: boolean }) {
+interface FolderTreeProps extends FolderTreeActions {
+  currentPath: string | null;
+  currentFolder?: FolderEntry;
+  hiddenOverrides?: ReadonlyMap<string, boolean>;
+  onClose?: () => void;
+  onNavigate?: () => void;
+  modal?: boolean;
+}
+
+export function FolderTree({ currentPath, currentFolder, hiddenOverrides = emptyHiddenOverrides, onClose, onNavigate, modal = false, onUpdateFolder, onEditAlias, onEditCollections }: FolderTreeProps) {
   const { bootstrap, preferences, setPreferences } = useApp();
   const navigate = useNavigate();
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const commitWidth = useCallback((leftSidebarWidth: number) => setPreferences({ leftSidebarWidth }), [setPreferences]);
   const resize = useSidebarResize({ storedWidth: preferences.leftSidebarWidth, config: folderSidebarWidth, edge: "right", reserveForOppositeSidebar: preferences.rightSidebarOpen, onCommit: commitWidth });
 
@@ -83,24 +189,31 @@ export function FolderTree({ currentPath, hiddenOverrides = emptyHiddenOverrides
     navigate(`/browse?${query({ path: folderPath })}`);
     onNavigate?.();
   }, [navigate, onNavigate]);
+  const actions = useMemo(() => ({ onUpdateFolder, onEditAlias, onEditCollections }), [onEditAlias, onEditCollections, onUpdateFolder]);
+  const hasActions = Boolean(onUpdateFolder && onEditAlias && onEditCollections);
+  const rootPaths = useMemo(() => new Set(bootstrap?.roots.map((root) => root.path) ?? []), [bootstrap?.roots]);
   const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides))) ?? [];
   return (
-    <aside ref={resize.sidebarRef} id="folder-sidebar" className={cx(sidebar.sidePanel, styles.leftPanel)} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined} style={{ "--sidebar-width": `${resize.renderedWidth}px` } as CSSProperties}>
+    <aside ref={resize.sidebarRef} id="folder-sidebar" className={cx(sidebar.sidePanel, styles.leftPanel)} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined} style={{ "--sidebar-width": `${resize.renderedWidth}px` } as CSSProperties} data-folder-tree-boundary>
       <div className={sidebar.panelHeading}><span>Folders</span>{onClose ? <button className={cx(ui.iconButton, sidebar.panelClose, sidebar.mobileClose)} type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
       {visibleFavorites.length ? (
         <section className="border-b border-default pb-2">
           <h2 className={styles.panelSectionLabel}><FolderHeart size={12} /> Favorites</h2>
-          {visibleFavorites.map((favorite) => (
-            <button className={cx(styles.favoriteRow, isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides) && styles.hidden)} type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
-              <span className="truncate">{favorite.alias ?? favorite.path.split("/").pop()}</span>
-            </button>
-          ))}
+          {visibleFavorites.map((favorite) => {
+            const name = bootstrap?.roots.find((root) => root.path === favorite.path)?.label ?? favorite.path.split("/").filter(Boolean).at(-1) ?? favorite.path;
+            const folder: FolderEntry = { path: favorite.path, name, displayName: favorite.alias ?? name, hidden: favorite.hidden, favorite: true };
+            return hasActions ? <FavoriteFolderRow key={favorite.id} folder={folder} hiddenOverrides={hiddenOverrides} rootPaths={rootPaths} menuId={`favorite:${favorite.id}`} openMenuId={openMenuId} onOpenMenu={setOpenMenuId} onOpen={open} actions={actions} /> : (
+              <button className={cx(styles.favoriteRow, isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides) && styles.hidden)} type="button" key={favorite.id} onClick={() => open(favorite.path)} title={favorite.path}>
+                <span className="truncate">{folder.displayName}</span>
+              </button>
+            );
+          })}
         </section>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto py-1" role="tree" aria-label="Media roots">
+      <div className="min-h-0 flex-1 overflow-y-auto py-1" role="tree" aria-label="Media roots" data-folder-tree-scroll>
         {bootstrap?.roots.map((root) => {
-          const folder: FolderEntry = { path: root.path, name: root.label, displayName: root.label, hidden: false, favorite: false };
-          return root.available ? <TreeNode key={root.id} folder={folder} depth={0} currentPath={currentPath} showHidden={preferences.showHidden} hiddenOverrides={hiddenOverrides} onOpen={open} /> : (
+          const folder: FolderEntry = currentFolder?.path === root.path ? currentFolder : { path: root.path, name: root.label, displayName: root.label, hidden: false, favorite: false };
+          return root.available ? <TreeNode key={root.id} folder={folder} depth={0} currentPath={currentPath} showHidden={preferences.showHidden} hiddenOverrides={hiddenOverrides} rootPaths={rootPaths} branchId={root.id} openMenuId={openMenuId} onOpenMenu={setOpenMenuId} onOpen={open} actions={actions} /> : (
             <div key={root.id} className={cx(styles.treeRow, "opacity-50")} title={`${root.path} is unavailable`}><HardDrive size={14} /><span className="truncate">{root.label}</span></div>
           );
         })}

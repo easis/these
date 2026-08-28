@@ -1,4 +1,4 @@
-import { ArrowRight, FolderHeart, Images, ListChecks, ShieldCheck } from "lucide-react";
+import { ArrowRight, FolderHeart, Images, Library, ListChecks, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AppName } from "../components/AppName";
 import { cx } from "../lib/cx";
@@ -33,6 +33,7 @@ export function HomePage() {
           <Link className={cx(styles.homeAction, !firstRoot && "pointer-events-none opacity-45")} to={firstRoot ? `/browse?path=${encodeURIComponent(firstRoot.path)}` : "/browse"}>
             <Images size={18} /><span><strong>Browse media</strong><small>Open folders and inspect files</small></span><ArrowRight size={16} />
           </Link>
+          <Link className={styles.homeAction} to="/collections"><Library size={18} /><span><strong>Folder collections</strong><small>Group related datasets across roots</small></span><ArrowRight size={16} /></Link>
           <Link className={styles.homeAction} to="/lists"><ListChecks size={18} /><span><strong>Review lists</strong><small>Selected and Maybe, side by side</small></span><ArrowRight size={16} /></Link>
           <Link className={styles.homeAction} to="/folders"><FolderHeart size={18} /><span><strong>Folder metadata</strong><small>Aliases, favorites and hidden folders</small></span><ArrowRight size={16} /></Link>
         </div>

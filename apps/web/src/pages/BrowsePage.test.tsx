@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   setItemStatus: vi.fn(),
   removeItem: vi.fn(),
   refresh: vi.fn(),
+  virtualizerOptions: null as null | { getScrollElement: () => Element | null; scrollMargin: number },
   activeList: null as TheseList | null,
   preferences: {
     theme: "light",
@@ -26,10 +27,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getTotalSize: () => count * 220,
-    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ key: index, index, start: index * 220, size: 220 })),
-  }),
+  useVirtualizer: (options: { count: number; getScrollElement: () => Element | null; scrollMargin: number }) => {
+    mocks.virtualizerOptions = options;
+    return {
+      getTotalSize: () => options.count * 220,
+      getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ key: index, index, start: index * 220, size: 220 })),
+    };
+  },
 }));
 
 vi.mock("../lib/api", async () => ({
@@ -63,6 +67,7 @@ describe("BrowsePage requests", () => {
     mocks.setItemStatus.mockReset();
     mocks.removeItem.mockReset();
     mocks.refresh.mockReset();
+    mocks.virtualizerOptions = null;
     mocks.activeList = null;
     Object.assign(mocks.preferences, {
       theme: "light",
@@ -118,7 +123,7 @@ describe("BrowsePage requests", () => {
     expect(close).toHaveFocus();
 
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
-    expect(screen.getByTitle("/media")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Folder actions for Library" })).toHaveFocus();
     fireEvent.keyDown(window, { key: "Tab" });
     expect(close).toHaveFocus();
 
@@ -309,11 +314,11 @@ describe("BrowsePage requests", () => {
     });
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
-    expect(await screen.findByRole("button", { name: /Photos/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Photos" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "photo" } });
     await waitFor(() => expect(requests).toBe(2));
 
-    expect(screen.getByRole("button", { name: /Photos/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Photos" })).toBeInTheDocument();
     expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
     revalidated.resolve(browseResponse("/media", 0, { folders }));
   });
@@ -393,7 +398,7 @@ describe("BrowsePage requests", () => {
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     const search = screen.getByLabelText("Search files and folders");
     fireEvent.change(search, { target: { value: "trip" } });
-    expect(await screen.findByRole("button", { name: /Family trips/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Family trips" })).toBeInTheDocument();
     expect(screen.queryByText("No files or folders match this search.")).not.toBeInTheDocument();
 
     const requestsBeforeClear = mocks.api.mock.calls.length;
@@ -563,7 +568,7 @@ describe("BrowsePage requests", () => {
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: "Open first.jpg" }));
     await waitFor(() => expect(pageRequests).toBe(1));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Selected/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Mark selected" }));
     expect(await screen.findByText("Could not classify the file.")).toBeInTheDocument();
     await waitFor(() => expect(baseRequests).toBe(2));
 
@@ -623,8 +628,47 @@ describe("BrowsePage requests", () => {
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
 
-    expect(await screen.findByRole("button", { name: /Photos/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Photos" })).toBeInTheDocument();
     expect(screen.queryByText("No media in this folder.")).not.toBeInTheDocument();
+  });
+
+  it("uses the Browse scroll container for virtual rows without a nested scroller", async () => {
+    mocks.api.mockResolvedValue(browseResponse("/media", 1, {
+      folders: [{ path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false }],
+      media: [mediaEntry("/media/photo.jpg")],
+    }));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText("photo.jpg")).toBeInTheDocument();
+
+    const scrollElement = document.querySelector(`.${styles.galleryScroll}`);
+    expect(mocks.virtualizerOptions?.getScrollElement()).toBe(scrollElement);
+    expect(scrollElement).toContain(document.querySelector(`.${styles.virtualGalleryScroll}`));
+  });
+
+  it("remeasures the virtual gallery when the folder grid appears or disappears", async () => {
+    let observers = 0;
+    vi.stubGlobal("ResizeObserver", class {
+      constructor() { observers += 1; }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    mocks.api.mockImplementation((url: string) => {
+      const filter = new URL(url, "http://these.test").searchParams.get("filter");
+      return Promise.resolve(browseResponse("/media", 1, {
+        folders: filter ? [] : [{ path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false }],
+        media: [mediaEntry("/media/photo.jpg")],
+      }));
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByRole("button", { name: "Photos" })).toBeInTheDocument();
+    const observersWithFolders = observers;
+
+    fireEvent.change(screen.getByLabelText("Search files and folders"), { target: { value: "photo" } });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Photos" })).not.toBeInTheDocument());
+    expect(observers).toBeGreaterThan(observersWithFolders);
   });
 
   it("shows persistent folder states without changing directory navigation names", async () => {
@@ -644,8 +688,9 @@ describe("BrowsePage requests", () => {
     expect(normal.querySelector(`.${styles.folderStatuses}`)).not.toBeInTheDocument();
     expect(favorite.querySelector(`.${styles.folderStatuses} .${styles.favorite}`)).toBeInTheDocument();
     expect(hidden.querySelector(`.${styles.folderStatuses} .${styles.hidden}`)).toBeInTheDocument();
-    expect(within(favorite.closest<HTMLElement>(`.${styles.folderItem}`)!).getByRole("button", { name: "Remove favorite" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(hidden.closest<HTMLElement>(`.${styles.folderItem}`)!).getByRole("button", { name: "Unhide folder" })).toBeInTheDocument();
+    expect(within(openFolderActions("Favorite folder")).getByRole("menuitemcheckbox", { name: "Remove favorite" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(within(openFolderActions("Hidden folder")).getByRole("menuitemcheckbox", { name: "Unhide folder" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("updates and restores a subfolder favorite indicator optimistically", async () => {
@@ -660,14 +705,58 @@ describe("BrowsePage requests", () => {
     const folder = (await screen.findByRole("button", { name: /^Photos$/ })).closest<HTMLElement>(`.${styles.folderItem}`)!;
     expect(folder.querySelector(`.${styles.folderStatuses}`)).not.toBeInTheDocument();
 
-    fireEvent.click(within(folder).getByRole("button", { name: "Favorite" }));
+    const menuTrigger = within(folder).getByRole("button", { name: "Folder actions for Photos" });
+    fireEvent.click(menuTrigger);
+    fireEvent.click(within(screen.getByRole("menu", { name: "Photos actions" })).getByRole("menuitemcheckbox", { name: "Favorite" }));
     expect(folder.querySelector(`.${styles.folderStatuses} .${styles.favorite}`)).toBeInTheDocument();
-    expect(within(folder).getByRole("button", { name: "Remove favorite" })).toBeDisabled();
+    expect(menuTrigger).toBeDisabled();
 
     await act(async () => update.reject(new Error("Could not save the favorite.")));
     expect(await screen.findByText("Could not save the favorite.")).toBeInTheDocument();
     expect(folder.querySelector(`.${styles.folderStatuses}`)).not.toBeInTheDocument();
-    expect(within(folder).getByRole("button", { name: "Favorite" })).not.toBeDisabled();
+    expect(menuTrigger).not.toBeDisabled();
+  });
+
+  it("opens one accessible folder menu and restores trigger focus on dismissal", async () => {
+    mocks.api.mockResolvedValue(browseResponse("/media", 0, {
+      folders: [
+        { path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false },
+        { path: "/media/trips", name: "trips", displayName: "Trips", hidden: false, favorite: false },
+      ],
+    }));
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+
+    const photosTrigger = await screen.findByRole("button", { name: "Folder actions for Photos" });
+    photosTrigger.focus();
+    fireEvent.keyDown(photosTrigger, { key: "ArrowDown" });
+    const photosMenu = screen.getByRole("menu", { name: "Photos actions" });
+    await waitFor(() => expect(within(photosMenu).getByRole("menuitemcheckbox", { name: "Favorite" })).toHaveFocus());
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(within(photosMenu).getByRole("menuitem", { name: "Edit alias" })).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Photos actions" })).not.toBeInTheDocument();
+    expect(photosTrigger).toHaveFocus();
+
+    fireEvent.click(photosTrigger);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu", { name: "Photos actions" })).not.toBeInTheDocument();
+    await waitFor(() => expect(photosTrigger).toHaveFocus());
+  });
+
+  it("keeps only one folder action menu open across the gallery and sidebar", async () => {
+    mocks.preferences.leftSidebarOpen = true;
+    mocks.api.mockResolvedValue(browseResponse("/media", 0, {
+      folders: [{ path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false }],
+    }));
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+
+    expect(await screen.findByRole("button", { name: "Photos" })).toBeInTheDocument();
+    openFolderActions("Photos");
+    fireEvent.click(screen.getByRole("button", { name: "Folder actions for Library" }));
+
+    expect(screen.queryByRole("menu", { name: "Photos actions" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menu", { name: "Library actions" })).toBeInTheDocument();
   });
 
   it("filters images and videos independently while keeping one type active", async () => {
@@ -759,7 +848,7 @@ describe("BrowsePage requests", () => {
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
     const firstFolder = (await screen.findByText(firstName)).closest<HTMLElement>(`.${styles.folderItem}`)!;
-    fireEvent.click(within(firstFolder).getByRole("button", { name: "Edit alias" }));
+    fireEvent.click(within(openFolderActions(firstName)).getByRole("menuitem", { name: "Create alias" }));
     fireEvent.change(screen.getByRole("textbox", { name: `Alias for ${firstName}` }), { target: { value: firstName } });
     fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
 
@@ -778,7 +867,7 @@ describe("BrowsePage requests", () => {
     const search = screen.getByLabelText("Search files and folders");
     fireEvent.change(search, { target: { value: "Trips" } });
     const folder = (await screen.findByText("Trips")).closest<HTMLElement>(`.${styles.folderItem}`)!;
-    const editAlias = within(folder).getByRole("button", { name: "Edit alias" });
+    const editAlias = within(openFolderActions("Trips")).getByRole("menuitem", { name: "Edit alias" });
     editAlias.focus();
     fireEvent.click(editAlias);
     fireEvent.change(screen.getByRole("textbox", { name: "Alias for journeys" }), { target: { value: "Holiday" } });
@@ -804,7 +893,7 @@ describe("BrowsePage requests", () => {
     fireEvent.click(within(sidebar).getByRole("button", { name: "Expand Library" }));
     expect(await within(sidebar).findByTitle("/media/photos")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide folder" }));
+    fireEvent.click(within(openFolderActions("Photos")).getByRole("menuitemcheckbox", { name: "Hide folder" }));
     expect(within(sidebar).queryByTitle("/media/photos")).not.toBeInTheDocument();
 
     await act(async () => update.reject(new Error("Could not hide the folder.")));
@@ -842,8 +931,8 @@ describe("BrowsePage requests", () => {
     });
 
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
-    expect(await screen.findByRole("button", { name: /Trips/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Edit alias" }));
+    expect(await screen.findByRole("button", { name: "Trips" })).toBeInTheDocument();
+    fireEvent.click(within(openFolderActions("Trips")).getByRole("menuitem", { name: "Edit alias" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Alias for trips" }), { target: { value: "Holiday" } });
     fireEvent.click(screen.getByRole("button", { name: "Save alias" }));
 
@@ -869,7 +958,7 @@ describe("BrowsePage requests", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mark selected" }));
 
     expect(screen.getByText("photo.jpg").closest(`.${mediaTileStyles.mediaTile}`)).toHaveClass(mediaTileStyles.selected!);
-    expect(screen.getByRole("button", { name: "Mark selected" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove selected status" })).toBeDisabled();
     expect(screen.queryByText("Opening folder…")).not.toBeInTheDocument();
 
     update.reject(new Error("Could not classify the file."));
@@ -880,6 +969,21 @@ describe("BrowsePage requests", () => {
     expect(screen.getByRole("button", { name: "Mark selected" })).not.toBeDisabled();
   });
 
+  it("removes an active tile status through the same Selected button", async () => {
+    mocks.activeList = list(7, "Keepers");
+    mocks.removeItem.mockResolvedValue(undefined);
+    mocks.api.mockResolvedValue(browseResponse("/media", 1, { media: [{ ...mediaEntry("/media/photo.jpg"), status: "selected" }] }));
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    const removeSelected = await screen.findByRole("button", { name: "Remove selected status" });
+    expect(removeSelected).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Remove from active list" })).not.toBeInTheDocument();
+    fireEvent.click(removeSelected);
+
+    await waitFor(() => expect(mocks.removeItem).toHaveBeenCalledWith("/media/photo.jpg"));
+    expect(screen.getByRole("button", { name: "Mark selected" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("does not hide a media root and can restore a hidden subfolder", async () => {
     mocks.api.mockResolvedValue(browseResponse("/media", 0, {
       folders: [{ path: "/media/hidden", name: "hidden", displayName: "Hidden", hidden: true, favorite: false }],
@@ -887,11 +991,34 @@ describe("BrowsePage requests", () => {
     render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
 
     expect(await screen.findByRole("button", { name: "Hide current folder" })).toBeDisabled();
-    const unhide = screen.getByRole("button", { name: "Unhide folder" });
-    expect(unhide.closest(`.${styles.folderItem}`)).toHaveClass(styles.hidden!);
+    const hiddenFolder = (await screen.findByRole("button", { name: "Hidden" })).closest<HTMLElement>(`.${styles.folderItem}`)!;
+    expect(hiddenFolder).toHaveClass(styles.hidden!);
+    const unhide = within(openFolderActions("Hidden")).getByRole("menuitemcheckbox", { name: "Unhide folder" });
     fireEvent.click(unhide);
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/folder-metadata", expect.objectContaining({
       body: JSON.stringify({ path: "/media/hidden", hidden: false }),
+    })));
+  });
+
+  it("opens collection membership from both the current folder and a child folder", async () => {
+    const dogs = { path: "/media/dogs", name: "dogs", displayName: "Dog datasets", hidden: false, favorite: false };
+    mocks.api.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/browse?")) return Promise.resolve(browseResponse("/media", 0, { folders: [dogs] }));
+      if (url === "/api/collections") return Promise.resolve([{ id: 5, name: "Dogs", folderCount: 1, createdAt: "", updatedAt: "" }]);
+      if (url.startsWith("/api/folder-collections?") && !init?.method) return Promise.resolve({ collectionIds: [] });
+      if (url === "/api/folder-collections" && init?.method === "PUT") return Promise.resolve({ collectionIds: [5] });
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByRole("button", { name: "Add current folder to collections" })).toBeInTheDocument();
+    fireEvent.click(within(openFolderActions("Dog datasets")).getByRole("menuitem", { name: "Add to collections" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add to collections" });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Dogs/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/folder-collections", expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify({ path: dogs.path, collectionIds: [5] }),
     })));
   });
 });
@@ -904,6 +1031,12 @@ function NavigationHarness() {
 function LocationProbe() {
   const location = useLocation();
   return <span data-testid="location">{location.pathname}{location.search}</span>;
+}
+
+function openFolderActions(displayName: string) {
+  const folderGrid = document.querySelector<HTMLElement>(`.${styles.folderGrid}`)!;
+  fireEvent.click(within(folderGrid).getByRole("button", { name: `Folder actions for ${displayName}` }));
+  return screen.getByRole("menu", { name: `${displayName} actions` });
 }
 
 function browseResponse(folderPath: string, totalMedia: number, overrides: Partial<BrowseResponse> = {}): BrowseResponse {

@@ -22,28 +22,32 @@
 .showHiddenToggle { height: 28px; flex: none; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); }
 .sizeControl { height: 28px; display: flex; align-items: center; gap: 5px; padding: 0 5px; color: var(--text-muted); }
 .sizeControl input { width: 70px; accent-color: var(--accent); }
-.galleryScroll { min-height: 0; flex: 1; overflow-y: auto; padding: 7px; }
+.galleryScroll { position: relative; min-height: 0; flex: 1; overflow-y: auto; padding: 7px; }
 .folderGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 7px; margin-bottom: 8px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
-.folderItem { --folder-item-background: var(--surface); position: relative; min-width: 0; height: 42px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--folder-item-background); transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease; }
+.folderItem { --folder-item-background: var(--surface); position: relative; min-width: 0; height: 42px; display: flex; align-items: center; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--folder-item-background); transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease; }
 .folderItem:hover, .folderItem:focus-within { --folder-item-background: var(--surface-hover); border-color: var(--border-strong); color: var(--text-primary); }
 .folderItem:focus-within { border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong)); }
 .folderItem.hidden { opacity: .58; }
 .folderItem.hidden:hover, .folderItem.hidden:focus-within { opacity: .82; }
-.folderOpen { min-width: 0; height: 40px; flex: 1; display: flex; align-items: center; gap: 8px; overflow: hidden; padding: 0 10px; border: 0; color: inherit; background: transparent; text-align: left; font-size: var(--font-ui-lg); cursor: pointer; transition: padding-right 100ms ease; }
+.folderOpen { min-width: 0; height: 40px; flex: 1; display: flex; align-items: center; gap: 8px; overflow: hidden; padding: 0 6px 0 10px; border: 0; color: inherit; background: transparent; text-align: left; font-size: var(--font-ui-lg); cursor: pointer; }
 .folderOpen > svg { flex: none; }
 .folderStatuses { min-width: 0; flex: none; display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding-left: 3px; transition: opacity 100ms ease; }
 .folderStatuses .favorite { color: var(--maybe); }
 .folderStatuses .hidden { color: var(--accent); }
-.folderActions { position: absolute; z-index: 1; right: 3px; top: 50%; display: flex; align-items: center; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-50%); transition: opacity 100ms ease, visibility 100ms ease; }
-.folderActions::before { position: absolute; inset: 0 auto 0 -14px; width: 14px; content: ""; pointer-events: none; background: linear-gradient(90deg, transparent, var(--folder-item-background)); }
-.folderItem:hover .folderOpen, .folderItem:focus-within .folderOpen { padding-right: 114px; }
-.folderItem:hover .folderActions, .folderItem:focus-within .folderActions { opacity: 1; visibility: visible; }
-.folderItem:hover .folderStatuses, .folderItem:focus-within .folderStatuses { opacity: 0; }
-.folderActions button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 4px; color: var(--text-muted); background: transparent; pointer-events: auto; cursor: pointer; }
-.folderActions button:hover { color: var(--text-primary); background: var(--surface); }
-.folderActions button.favorite { color: var(--maybe); }
-.folderActions button.hidden { color: var(--accent); background: var(--accent-soft); }
-.virtualGalleryScroll { height: max(360px, calc(100dvh - 180px)); overflow-y: auto; scrollbar-gutter: stable; }
+.folderMenuControl { position: relative; z-index: 2; flex: none; display: flex; align-items: center; margin-right: 3px; }
+.folderMenuControlOpen { z-index: 30; }
+.folderMenuTrigger { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; opacity: 0; visibility: hidden; color: var(--text-muted); background: transparent; cursor: pointer; transition: opacity 100ms ease, visibility 100ms ease, color 100ms ease, background-color 100ms ease; }
+.folderItem:hover .folderMenuTrigger, .folderItem:focus-within .folderMenuTrigger, .folderMenuTrigger.open { opacity: 1; visibility: visible; }
+.folderMenuTrigger:hover, .folderMenuTrigger.open { color: var(--text-primary); background: var(--surface-hover); }
+.folderMenuTrigger:disabled { cursor: not-allowed; opacity: .4; }
+.galleryScroll:has(.folderMenuTrigger.open) .folderMenuTrigger:not(.open) { opacity: 0; visibility: hidden; }
+.folderMenu { position: absolute; z-index: 20; right: 0; top: calc(100% + 4px); width: 190px; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); box-shadow: 0 10px 28px rgb(0 0 0 / 18%); }
+.folderMenu.above { top: auto; bottom: calc(100% + 4px); }
+.folderMenu button { width: 100%; min-height: 32px; display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 6px; padding: 0 7px; border: 0; border-radius: 4px; color: var(--text-secondary); background: transparent; font-size: var(--font-ui-sm); text-align: left; cursor: pointer; }
+.folderMenu button:hover, .folderMenu button:focus-visible { color: var(--text-primary); background: var(--surface-hover); }
+.folderMenu button svg { color: var(--text-muted); }
+.folderMenu button:first-child svg { color: var(--maybe); }
+.virtualGalleryScroll { position: relative; width: 100%; }
 .loadMore { position: absolute; left: 50%; height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--surface); font-size: var(--font-ui-sm); cursor: pointer; transform: translateX(-50%); }
 .emptyGallery { height: 180px; display: grid; place-items: center; color: var(--text-muted); font-size: var(--font-ui-md); }
 
@@ -83,19 +87,21 @@
   .mobileSizeControl input { grid-column: 1; width: 100%; min-height: 24px; accent-color: var(--accent); }
   .mobileSizeControl output { grid-column: 2; grid-row: 1 / span 2; color: var(--text-muted); font-family: ui-monospace, monospace; font-size: var(--font-ui-sm); text-align: right; }
   .currentFolderName { margin: -2px 0 10px; overflow: hidden; color: var(--text-secondary); font-size: var(--font-ui-lg); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-  .currentFolderActions.expanded { width: 100%; height: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 0; border: 0; background: transparent; }
+  .currentFolderActions.expanded { width: 100%; height: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 0; border: 0; background: transparent; }
   .currentFolderActions.expanded button { width: auto; min-height: 48px; height: auto; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-secondary); font-size: var(--font-ui-sm); font-weight: 650; }
   .currentFolderActions.expanded button.favorite { border-color: color-mix(in srgb, var(--maybe) 40%, var(--border)); background: var(--maybe-soft); }
   .currentFolderActions.expanded button.hidden { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
   .folderGrid { grid-template-columns: 1fr; gap: 6px; }
   .folderItem { min-height: 48px; height: auto; }
   .folderOpen { min-height: 48px; height: auto; padding-inline: 11px; font-size: var(--font-ui-lg); }
-  .folderItem:hover .folderOpen, .folderItem:focus-within .folderOpen { padding-right: 11px; }
-  .folderActions { position: static; display: flex; padding: 0 2px 0 0; opacity: 1; visibility: visible; pointer-events: auto; background: transparent; transform: none; }
-  .folderActions::before { content: none; }
   .folderStatuses { display: none; }
-  .folderActions button { width: 44px; height: 44px; }
-  .virtualGalleryScroll { height: 100%; min-height: 0; }
+  .folderMenuControl { margin-right: 2px; }
+  .folderMenuTrigger { width: 44px; height: 44px; opacity: 1; visibility: visible; }
+  .folderMenu { right: 1px; width: min(210px, calc(100vw - 28px)); }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .folderMenuTrigger { opacity: 1; visibility: visible; }
 }
 
 @keyframes browserSheetIn { from { transform: translateY(18px); opacity: .7; } }

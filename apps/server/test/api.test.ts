@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import type { BootstrapResponse, BrowseResponse, FolderMetadata, ListItem, MediaMetadataResponse, TheseList } from "@these/shared";
+import type { BootstrapResponse, BrowseResponse, FolderCollection, FolderCollectionDetail, FolderMetadata, ListItem, MediaMetadataResponse, TheseList } from "@these/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig, parseMediaRoots } from "../src/config.js";
 
@@ -76,6 +76,96 @@ describe("These API", () => {
     expect(hiddenBrowse.json()).toMatchObject({ code: "FOLDER_HIDDEN" });
     const unsafe = await app!.inject({ method: "PATCH", url: `/api/folder-metadata/${record.id}`, payload: { path: "/etc" } });
     expect(unsafe.statusCode).toBe(403);
+  });
+
+  it("groups the same folder into multiple collections and replaces membership atomically", async () => {
+    const dogsPath = path.join(root, "dataset-dogs");
+    await mkdir(dogsPath);
+    const dogs = await createCollection(app!, "Dogs");
+    const training = await createCollection(app!, "Training sets");
+
+    const duplicate = await app!.inject({ method: "POST", url: "/api/collections", payload: { name: " dogs " } });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({ code: "COLLECTION_NAME_TAKEN" });
+
+    const assigned = await app!.inject({
+      method: "PUT",
+      url: "/api/folder-collections",
+      payload: { path: dogsPath, collectionIds: [dogs.id, training.id, dogs.id] },
+    });
+    expect(assigned.statusCode).toBe(200);
+    expect(assigned.json()).toEqual({ collectionIds: [dogs.id, training.id] });
+
+    const memberships = await app!.inject({ method: "GET", url: `/api/folder-collections?path=${encodeURIComponent(dogsPath)}` });
+    expect(new Set(memberships.json<{ collectionIds: number[] }>().collectionIds)).toEqual(new Set([dogs.id, training.id]));
+    expect((await app!.inject({ method: "GET", url: "/api/collections" })).json<FolderCollection[]>()).toMatchObject([
+      { id: dogs.id, name: "Dogs", folderCount: 1 },
+      { id: training.id, name: "Training sets", folderCount: 1 },
+    ]);
+
+    await app!.inject({ method: "POST", url: "/api/folder-metadata", payload: { path: dogsPath, alias: "All dog datasets", favorite: true } });
+    const detail = (await app!.inject({ method: "GET", url: `/api/collections/${dogs.id}` })).json<FolderCollectionDetail>();
+    expect(detail.folders).toEqual([
+      expect.objectContaining({ path: dogsPath, displayName: "All dog datasets", favorite: true, status: "ready" }),
+    ]);
+
+    await app!.inject({ method: "PUT", url: "/api/folder-collections", payload: { path: dogsPath, collectionIds: [training.id] } });
+    expect((await app!.inject({ method: "GET", url: `/api/collections/${dogs.id}` })).json<FolderCollectionDetail>().folders).toEqual([]);
+    expect((await app!.inject({ method: "GET", url: `/api/collections/${training.id}` })).json<FolderCollectionDetail>().folders).toHaveLength(1);
+  });
+
+  it("sorts collection names with the same locale-aware comparison used by the client", async () => {
+    await createCollection(app!, "Zoo");
+    await createCollection(app!, "ábaco");
+
+    const collections = (await app!.inject({ method: "GET", url: "/api/collections" })).json<FolderCollection[]>();
+    expect(collections.map((collection) => collection.name)).toEqual(["ábaco", "Zoo"]);
+  });
+
+  it("rejects unsafe collection members and removes only definitively missing folders", async () => {
+    const folderPath = path.join(root, "temporary-dataset");
+    const outside = path.join(temporary, "outside-dataset");
+    const unsafeLink = path.join(root, "linked-outside");
+    await Promise.all([mkdir(folderPath), mkdir(outside)]);
+    await symlink(outside, unsafeLink);
+    const collection = await createCollection(app!, "Ephemeral");
+
+    const unsafe = await app!.inject({ method: "PUT", url: "/api/folder-collections", payload: { path: unsafeLink, collectionIds: [collection.id] } });
+    expect(unsafe.statusCode).toBe(403);
+    expect(unsafe.json()).toMatchObject({ code: "SYMLINK_ESCAPE" });
+    const filePath = path.join(root, "not-a-folder.jpg");
+    await writeFile(filePath, "image");
+    expect((await app!.inject({ method: "PUT", url: "/api/folder-collections", payload: { path: filePath, collectionIds: [collection.id] } })).statusCode).toBe(400);
+
+    await app!.inject({ method: "PUT", url: "/api/folder-collections", payload: { path: folderPath, collectionIds: [collection.id] } });
+    const offlineRoot = path.join(temporary, "offline-media");
+    await rename(root, offlineRoot);
+    const unavailable = (await app!.inject({ method: "GET", url: `/api/collections/${collection.id}` })).json<FolderCollectionDetail>();
+    expect(unavailable).toMatchObject({ folderCount: 1, folders: [{ path: folderPath, status: "root-unavailable" }] });
+
+    await rename(offlineRoot, root);
+    await rm(folderPath, { recursive: true });
+    const cleaned = (await app!.inject({ method: "GET", url: `/api/collections/${collection.id}` })).json<FolderCollectionDetail>();
+    expect(cleaned).toMatchObject({ folderCount: 0, folders: [] });
+  });
+
+  it("retains collection membership when a folder is temporarily inaccessible", async () => {
+    const guardedParent = path.join(root, "guarded");
+    const folderPath = path.join(guardedParent, "dataset");
+    await mkdir(folderPath, { recursive: true });
+    const collection = await createCollection(app!, "Guarded");
+    await app!.inject({ method: "PUT", url: "/api/folder-collections", payload: { path: folderPath, collectionIds: [collection.id] } });
+
+    await chmod(guardedParent, 0o000);
+    try {
+      const unavailable = (await app!.inject({ method: "GET", url: `/api/collections/${collection.id}` })).json<FolderCollectionDetail>();
+      expect(unavailable).toMatchObject({ folderCount: 1, folders: [{ path: folderPath, status: "unavailable" }] });
+    } finally {
+      await chmod(guardedParent, 0o755);
+    }
+
+    const restored = (await app!.inject({ method: "GET", url: `/api/collections/${collection.id}` })).json<FolderCollectionDetail>();
+    expect(restored).toMatchObject({ folderCount: 1, folders: [{ path: folderPath, status: "ready" }] });
   });
 
   it("stores one toggle-friendly state per media and list", async () => {
@@ -369,6 +459,12 @@ describe("These API", () => {
 
 async function createList(app: FastifyInstance, name: string) {
   return (await app.inject({ method: "POST", url: "/api/lists", payload: { name } })).json<TheseList>();
+}
+
+async function createCollection(app: FastifyInstance, name: string) {
+  const response = await app.inject({ method: "POST", url: "/api/collections", payload: { name } });
+  expect(response.statusCode).toBe(201);
+  return response.json<FolderCollection>();
 }
 
 async function setItem(app: FastifyInstance, listId: number, mediaPath: string, status: "selected" | "maybe") {

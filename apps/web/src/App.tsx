@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { BrowsePage } from "./pages/BrowsePage";
+import { CollectionPage } from "./pages/CollectionPage";
+import { CollectionsPage } from "./pages/CollectionsPage";
 import { FolderManagerPage } from "./pages/FolderManagerPage";
 import { HomePage } from "./pages/HomePage";
 import { ListPage } from "./pages/ListPage";
@@ -13,6 +15,8 @@ export function App() {
       <Route element={<AppShell />}>
         <Route index element={<HomePage />} />
         <Route path="browse" element={<BrowsePage />} />
+        <Route path="collections" element={<CollectionsPage />} />
+        <Route path="collections/:id" element={<CollectionPage />} />
         <Route path="lists" element={<ListsPage />} />
         <Route path="lists/:id" element={<ListPage />} />
         <Route path="folders" element={<FolderManagerPage />} />

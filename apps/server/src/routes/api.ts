@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { BrowseResponse, FolderMetadata, ListItemStatus, MediaEntry, MediaKind } from "@these/shared";
+import type { BrowseResponse, CollectionFolder, FolderCollectionDetail, FolderMetadata, ListItemStatus, MediaEntry, MediaKind, MediaRoot } from "@these/shared";
 import { AppError } from "../lib/errors.js";
 import { mediaKindForPath, mimeTypeForPath } from "../lib/media.js";
 import { MediaAccess } from "../services/media-access.js";
@@ -42,6 +42,53 @@ export async function registerApi(app: FastifyInstance, dependencies: ApiDepende
         .filter((folder) => folder.favorite)
         .map((folder) => ({ ...folder, hidden: isHiddenByMetadata(folder.path, metadata) })),
     };
+  });
+
+  app.get("/api/collections", async () => {
+    await refreshCollectionFolderStatuses(repository, mediaAccess, mediaRoots);
+    return repository.getCollections();
+  });
+
+  app.post<{ Body: { name?: string } }>("/api/collections", async (request, reply) => {
+    const collection = await repository.createCollection(request.body?.name ?? "");
+    return reply.code(201).send(collection);
+  });
+
+  app.get<{ Params: { id: string } }>("/api/collections/:id", async (request) => {
+    const statuses = await refreshCollectionFolderStatuses(repository, mediaAccess, mediaRoots);
+    return collectionDetail(repository, mediaRoots, requireId(request.params.id), statuses);
+  });
+
+  app.patch<{ Params: { id: string }; Body: { name?: string } }>("/api/collections/:id", async (request) =>
+    repository.renameCollection(requireId(request.params.id), request.body?.name ?? ""),
+  );
+
+  app.delete<{ Params: { id: string } }>("/api/collections/:id", async (request, reply) => {
+    await repository.deleteCollection(requireId(request.params.id));
+    return reply.code(204).send();
+  });
+
+  app.put<{ Params: { id: string }; Body: { path?: string } }>("/api/collections/:id/folders", async (request, reply) => {
+    const folderPath = (await mediaAccess.resolveExisting(request.body?.path ?? "", "directory")).requestedPath;
+    await repository.addCollectionFolder(requireId(request.params.id), folderPath);
+    return reply.code(204).send();
+  });
+
+  app.delete<{ Params: { id: string }; Querystring: { path?: string } }>("/api/collections/:id/folders", async (request, reply) => {
+    await repository.removeCollectionFolder(requireId(request.params.id), requireStoredFolderPath(request.query.path));
+    return reply.code(204).send();
+  });
+
+  app.get<{ Querystring: { path?: string } }>("/api/folder-collections", async (request) => {
+    const folderPath = (await mediaAccess.resolveExisting(request.query.path ?? "", "directory")).requestedPath;
+    return { collectionIds: await repository.getFolderCollectionIds(folderPath) };
+  });
+
+  app.put<{ Body: { path?: string; collectionIds?: number[] } }>("/api/folder-collections", async (request) => {
+    const folderPath = (await mediaAccess.resolveExisting(request.body?.path ?? "", "directory")).requestedPath;
+    const collectionIds = requireCollectionIds(request.body?.collectionIds);
+    repository.setFolderCollections(folderPath, collectionIds);
+    return { collectionIds };
   });
 
   app.get<{ Querystring: { path?: string; offset?: string; limit?: string; activeListId?: string; showHidden?: string; filter?: string; kinds?: string } }>("/api/browse", async (request) => {
@@ -308,6 +355,64 @@ async function withFolderStatus(repository: Repository, mediaAccess: MediaAccess
   })));
 }
 
+type CollectionFolderStatus = CollectionFolder["status"] | "invalid";
+
+async function refreshCollectionFolderStatuses(repository: Repository, mediaAccess: MediaAccess, mediaRoots: MediaRootService) {
+  await mediaRoots.refresh();
+  const paths = await repository.getAllCollectionFolderPaths();
+  const checked = await Promise.all(paths.map(async (folderPath) => [folderPath, await getCollectionFolderStatus(mediaAccess, folderPath)] as const));
+  const invalidPaths = checked.filter(([, status]) => status === "invalid").map(([folderPath]) => folderPath);
+  await repository.deleteCollectionFoldersByPath(invalidPaths);
+  return new Map(checked.filter((entry): entry is readonly [string, CollectionFolder["status"]] => entry[1] !== "invalid"));
+}
+
+async function getCollectionFolderStatus(mediaAccess: MediaAccess, folderPath: string): Promise<CollectionFolderStatus> {
+  let reference;
+  try {
+    reference = mediaAccess.validateReference(folderPath);
+  } catch {
+    return "invalid";
+  }
+  if (!reference.root.canonicalPath) return "root-unavailable";
+  try {
+    await mediaAccess.resolveExisting(folderPath, "directory");
+    return "ready";
+  } catch (error) {
+    if (error instanceof AppError && ["PATH_MISSING", "PATH_TYPE_MISMATCH", "SYMLINK_ESCAPE"].includes(error.code)) return "invalid";
+    return "unavailable";
+  }
+}
+
+async function collectionDetail(repository: Repository, mediaRoots: MediaRootService, id: number, statuses: Map<string, CollectionFolder["status"]>): Promise<FolderCollectionDetail> {
+  const [collection, folderPaths, metadata] = await Promise.all([
+    repository.getCollection(id),
+    repository.getCollectionFolderPaths(id),
+    repository.getFolderMetadata(),
+  ]);
+  const metadataByPath = new Map(metadata.map((record) => [record.path, record]));
+  const roots = mediaRoots.getPublicRoots();
+  const folders = folderPaths.map((folderPath): CollectionFolder => {
+    const folderMetadata = metadataByPath.get(folderPath);
+    const root = findContainingRoot(folderPath, roots);
+    const name = root?.path === folderPath ? root.label : path.basename(folderPath);
+    return {
+      path: folderPath,
+      name,
+      displayName: folderMetadata?.alias ?? name,
+      hidden: isHiddenByMetadata(folderPath, metadata),
+      favorite: folderMetadata?.favorite ?? false,
+      status: statuses.get(folderPath) ?? "root-unavailable",
+    };
+  }).sort((left, right) => left.displayName.localeCompare(right.displayName, undefined, { numeric: false }) || left.path.localeCompare(right.path));
+  return { ...collection, folders };
+}
+
+function findContainingRoot(folderPath: string, roots: MediaRoot[]): MediaRoot | undefined {
+  return roots
+    .filter((root) => folderPath === root.path || folderPath.startsWith(`${root.path}${path.sep}`))
+    .sort((left, right) => right.path.length - left.path.length)[0];
+}
+
 function isHiddenByMetadata(folderPath: string, metadata: Awaited<ReturnType<Repository["getFolderMetadata"]>>) {
   const normalized = path.resolve(folderPath);
   return metadata.some((record) => record.hidden && (normalized === record.path || normalized.startsWith(`${record.path}${path.sep}`)));
@@ -334,6 +439,18 @@ function nullableInteger(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function requireStoredFolderPath(value: string | undefined): string {
+  if (!value || value.includes("\0") || !path.isAbsolute(value)) throw new AppError("A valid absolute folder path is required.");
+  return path.resolve(value);
+}
+
+function requireCollectionIds(value: unknown): number[] {
+  if (!Array.isArray(value) || value.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw new AppError("Collection ids must be an array of positive integers.");
+  }
+  return [...new Set(value as number[])];
 }
 
 function parseMediaKinds(value: string | undefined): Set<MediaKind> {

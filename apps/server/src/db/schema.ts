@@ -19,6 +19,33 @@ export const folderMetadata = sqliteTable(
   ],
 );
 
+export const folderCollections = sqliteTable(
+  "folder_collections",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    nameKey: text("name_key").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [uniqueIndex("folder_collections_name_key_unique").on(table.nameKey)],
+);
+
+export const folderCollectionItems = sqliteTable(
+  "folder_collection_items",
+  {
+    collectionId: integer("collection_id")
+      .notNull()
+      .references(() => folderCollections.id, { onDelete: "cascade" }),
+    folderPath: text("folder_path").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("folder_collection_items_collection_path_unique").on(table.collectionId, table.folderPath),
+    index("folder_collection_items_path_idx").on(table.folderPath),
+  ],
+);
+
 export const lists = sqliteTable("lists", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
