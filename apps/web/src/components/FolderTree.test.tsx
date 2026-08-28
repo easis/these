@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import type { BrowseResponse } from "@these/shared";
+import type { BrowseResponse, FolderCollectionDetail } from "@these/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderTree } from "./FolderTree";
 import styles from "./FolderTree.module.css";
@@ -132,6 +132,68 @@ describe("FolderTree", () => {
     expect(screen.queryByRole("menu", { name: "Photos actions" })).not.toBeInTheDocument();
     expect(screen.getByRole("menu", { name: "Library actions" })).toBeInTheDocument();
     expect(screen.getByRole("menuitemcheckbox", { name: "Hide folder" })).toBeDisabled();
+  });
+
+  it("switches folder scope from an accessible collection menu", () => {
+    const onCollectionChange = vi.fn();
+    const onRequestCollections = vi.fn();
+    render(<FolderTree
+      currentPath="/media"
+      collections={[{ id: 7, name: "Client selects", folderCount: 3, createdAt: "", updatedAt: "" }]}
+      onCollectionChange={onCollectionChange}
+      onRequestCollections={onRequestCollections}
+    />, { wrapper: MemoryRouter });
+
+    const trigger = screen.getByRole("button", { name: "Folder scope: All folders" });
+    fireEvent.click(trigger);
+    expect(onRequestCollections).toHaveBeenCalledOnce();
+    const menu = screen.getByRole("menu", { name: "Folder scope" });
+    expect(within(menu).getByRole("menuitemradio", { name: /All folders/ })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Client selects/ }));
+    expect(onCollectionChange).toHaveBeenCalledWith(7);
+    expect(trigger).toHaveFocus();
+
+    fireEvent.click(trigger);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole("menu", { name: "Folder scope" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitemradio", { name: /All folders/ })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitemradio", { name: /Client selects/ })).toHaveFocus();
+  });
+
+  it("renders collection members as independent roots and activates only the most specific nested member", async () => {
+    mocks.favorites = [{ id: 1, path: "/media/outside", alias: "Outside favorite", favorite: true, hidden: false, status: "ok", createdAt: "", updatedAt: "" }];
+    const collection: FolderCollectionDetail = {
+      id: 7,
+      name: "Client selects",
+      folderCount: 4,
+      createdAt: "",
+      updatedAt: "",
+      folders: [
+        { path: "/media/photos", name: "photos", displayName: "Photos", hidden: false, favorite: false, status: "ready" },
+        { path: "/media/photos/trip", name: "trip", displayName: "Trip", hidden: false, favorite: false, status: "ready" },
+        { path: "/offline/archive", name: "archive", displayName: "Archive", hidden: false, favorite: false, status: "root-unavailable" },
+        { path: "/media/secret", name: "secret", displayName: "Secret", hidden: true, favorite: false, status: "ready" },
+      ],
+    };
+    mocks.api.mockImplementation((url: string) => {
+      const folderPath = new URL(url, "http://these.test").searchParams.get("path")!;
+      return Promise.resolve({ ...treeResponse("Child", `${folderPath}/child`), path: folderPath, currentFolder: { path: folderPath, name: "trip", displayName: "Trip", hidden: false, favorite: false } });
+    });
+
+    render(<FolderTree currentPath="/media/photos/trip/day" activeCollectionId={7} collections={[collection]} collection={collection} />, { wrapper: MemoryRouter });
+
+    expect(screen.queryByText("Outside favorite")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("/media")).not.toBeInTheDocument();
+    expect(screen.getByTitle("/media/photos")).toBeInTheDocument();
+    expect(screen.getByTitle("/media/photos/trip")).toBeInTheDocument();
+    expect(screen.queryByTitle("/media/secret")).not.toBeInTheDocument();
+    expect(screen.getByText("Root unavailable")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.api).toHaveBeenCalledOnce());
+    expect(new URL(mocks.api.mock.calls[0]![0], "http://these.test").searchParams.get("path")).toBe("/media/photos/trip");
   });
 
   it("exposes an accessible desktop separator and resizes with the keyboard", () => {

@@ -1,4 +1,4 @@
-import { EyeOff, Folder, FolderHeart, Pencil, Star, Trash2, WifiOff } from "lucide-react";
+import { EyeOff, Folder, FolderHeart, Images, Pencil, Star, Trash2, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { FolderCollectionDetail } from "@these/shared";
@@ -67,11 +67,11 @@ export function CollectionPage() {
 
   return (
     <div className={content.pageScroll}><div className={content.contentPage}>
-      {collection ? <div className={cx(content.pageTitleRow, styles.detailTitle)}><div><p className={content.eyebrow}>Collection</p><div className={styles.titleLine}><CollectionMark className={styles.collectionMark} /><h1>{collection.name}</h1></div><p>{collection.folderCount} {collection.folderCount === 1 ? "folder" : "folders"}, each opening in the regular browser.</p></div><div className={styles.titleActions}><button className={ui.compactButton} type="button" onClick={() => setRenaming(true)}><Pencil size={13} />Rename</button><button className={cx(ui.compactButton, styles.dangerButton)} type="button" onClick={() => void deleteCollection()}><Trash2 size={13} />Delete</button></div></div> : null}
+      {collection ? <div className={cx(content.pageTitleRow, styles.detailTitle)}><div><p className={content.eyebrow}>Collection</p><div className={styles.titleLine}><CollectionMark className={styles.collectionMark} /><h1>{collection.name}</h1></div><p>{collection.folderCount} {collection.folderCount === 1 ? "folder" : "folders"} available as a focused Browse workspace.</p></div><div className={styles.titleActions}><Link className={cx(ui.compactButton, ui.primary)} to={`/browse?${query({ collection: collection.id })}`}><Images size={13} />Browse collection</Link><button className={ui.compactButton} type="button" onClick={() => setRenaming(true)}><Pencil size={13} />Rename</button><button className={cx(ui.compactButton, styles.dangerButton)} type="button" onClick={() => void deleteCollection()}><Trash2 size={13} />Delete</button></div></div> : null}
       {error ? <div className={cx(ui.inlineError, styles.detailError)} role="alert">{error}</div> : null}
       {loading ? <div className={cx(content.emptyState, content.compact)}><p>Loading collection…</p></div> : collection?.folders.length ? <div className={styles.folderShelf}>
         {collection.folders.map((folder) => <article className={styles.folderRow} key={folder.path}>
-          {folder.status === "ready" && (!folder.hidden || preferences.showHidden) ? <Link className={styles.folderLink} to={`/browse?${query({ path: folder.path })}`} title={folder.path}><Folder size={18} fill="currentColor" fillOpacity={0.1} /><span><strong>{folder.displayName}</strong><code>{folder.path}</code></span></Link> : <div className={styles.unavailableFolder} title={folder.path}>{folder.hidden && !preferences.showHidden ? <EyeOff size={18} /> : <WifiOff size={18} />}<span><strong>{folder.displayName}</strong><code>{folder.path}</code></span></div>}
+          {folder.status === "ready" && (!folder.hidden || preferences.showHidden) ? <Link className={styles.folderLink} to={`/browse?${query({ collection: collection.id, path: folder.path })}`} title={folder.path}><Folder size={18} fill="currentColor" fillOpacity={0.1} /><span><strong>{folder.displayName}</strong><code>{folder.path}</code></span></Link> : <div className={styles.unavailableFolder} title={folder.path}>{folder.hidden && !preferences.showHidden ? <EyeOff size={18} /> : <WifiOff size={18} />}<span><strong>{folder.displayName}</strong><code>{folder.path}</code></span></div>}
           <div className={styles.folderMeta}>
             {folder.favorite ? <span className={styles.badge} title="Favorite"><Star size={12} fill="currentColor" />Favorite</span> : null}
             {folder.hidden ? <span className={styles.badge} title="Hidden"><EyeOff size={12} />Hidden</span> : null}

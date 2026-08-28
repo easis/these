@@ -9,6 +9,8 @@ export interface LocalPreferences {
   rightSidebarWidth: number;
   showHidden: boolean;
   lastFolder: string | null;
+  activeCollectionId: number | null;
+  collectionLastFolders: Record<string, string>;
 }
 
 const key = "these.preferences.v1";
@@ -48,6 +50,8 @@ export const defaultPreferences: LocalPreferences = {
   rightSidebarWidth: listSidebarWidth.default,
   showHidden: false,
   lastFolder: null,
+  activeCollectionId: null,
+  collectionLastFolders: {},
 };
 
 export function readPreferences(): LocalPreferences {
@@ -58,6 +62,8 @@ export function readPreferences(): LocalPreferences {
       ...stored,
       leftSidebarWidth: clampSidebarWidth(stored.leftSidebarWidth, folderSidebarWidth),
       rightSidebarWidth: clampSidebarWidth(stored.rightSidebarWidth, listSidebarWidth),
+      activeCollectionId: positiveIntegerOrNull(stored.activeCollectionId),
+      collectionLastFolders: collectionFolderMap(stored.collectionLastFolders),
     };
   } catch {
     return defaultPreferences;
@@ -71,7 +77,20 @@ export function clampSidebarWidth(value: unknown, config: SidebarWidthConfig, ma
 }
 
 export function writePreferences(value: LocalPreferences) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Preferences are optional when storage is disabled or full.
+  }
+}
+
+function positiveIntegerOrNull(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function collectionFolderMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([collectionId, folderPath]) => /^\d+$/.test(collectionId) && typeof folderPath === "string" && folderPath.length > 0));
 }
 
 export function applyTheme(theme: ThemePreference) {

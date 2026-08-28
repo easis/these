@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FolderCollection, FolderEntry } from "@these/shared";
 import { FolderCollectionsDialog } from "./FolderCollectionsDialog";
 
-const mocks = vi.hoisted(() => ({ api: vi.fn(), onClose: vi.fn() }));
+const mocks = vi.hoisted(() => ({ api: vi.fn(), onClose: vi.fn(), onSaved: vi.fn() }));
 
 vi.mock("../lib/api", async () => ({
   ...await vi.importActual<typeof import("../lib/api")>("../lib/api"),
@@ -18,6 +18,7 @@ describe("FolderCollectionsDialog", () => {
   beforeEach(() => {
     mocks.api.mockReset();
     mocks.onClose.mockReset();
+    mocks.onSaved.mockReset();
     mocks.api.mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/collections" && init?.method === "POST") return Promise.resolve({ id: 3, name: "Archive", folderCount: 0, createdAt: "", updatedAt: "" });
       if (url === "/api/collections") return Promise.resolve([dogs, training]);
@@ -28,7 +29,7 @@ describe("FolderCollectionsDialog", () => {
   });
 
   it("loads memberships in parallel, creates inline and saves the complete selection", async () => {
-    render(<FolderCollectionsDialog folder={folder} onClose={mocks.onClose} />);
+    render(<FolderCollectionsDialog folder={folder} onClose={mocks.onClose} onSaved={mocks.onSaved} />);
     const dialog = screen.getByRole("dialog", { name: "Add to collections" });
     const dogsCheckbox = await within(dialog).findByRole("checkbox", { name: /Dogs/ });
     const trainingCheckbox = within(dialog).getByRole("checkbox", { name: /Training/ });
@@ -47,6 +48,7 @@ describe("FolderCollectionsDialog", () => {
       body: JSON.stringify({ path: folder.path, collectionIds: [dogs.id, training.id, 3] }),
     })));
     expect(mocks.onClose).toHaveBeenCalledOnce();
+    expect(mocks.onSaved).toHaveBeenCalledOnce();
   });
 
   it("does not allow an empty overwrite when membership loading fails", async () => {
