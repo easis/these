@@ -1,7 +1,7 @@
-import { ChevronRight, Folder, FolderHeart, HardDrive, PanelLeftClose } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { useNavigate } from "react-router-dom";
-import type { BrowseResponse, FolderEntry } from "@these/shared";
+import { Check, ChevronDown, ChevronRight, Folder, FolderHeart, Folders, HardDrive, Library, PanelLeftClose, Settings2, WifiOff } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import type { BrowseResponse, CollectionFolder, FolderCollection, FolderCollectionDetail, FolderEntry } from "@these/shared";
 import { applyFolderPatch, FolderActionMenu, type FolderActionMenuClasses, type FolderPatch } from "./FolderActionMenu";
 import { api, isAbortError, query } from "../lib/api";
 import { cx } from "../lib/cx";
@@ -176,9 +176,15 @@ interface FolderTreeProps extends FolderTreeActions {
   onClose?: () => void;
   onNavigate?: () => void;
   modal?: boolean;
+  activeCollectionId?: number | null;
+  collections?: FolderCollection[];
+  collection?: FolderCollectionDetail | null;
+  collectionLoading?: boolean;
+  onCollectionChange?: (collectionId: number | null) => void;
+  onRequestCollections?: () => void;
 }
 
-export function FolderTree({ currentPath, currentFolder, hiddenOverrides = emptyHiddenOverrides, onClose, onNavigate, modal = false, onUpdateFolder, onEditAlias, onEditCollections }: FolderTreeProps) {
+export function FolderTree({ currentPath, currentFolder, hiddenOverrides = emptyHiddenOverrides, onClose, onNavigate, modal = false, activeCollectionId = null, collections = [], collection = null, collectionLoading = false, onCollectionChange, onRequestCollections, onUpdateFolder, onEditAlias, onEditCollections }: FolderTreeProps) {
   const { bootstrap, preferences, setPreferences } = useApp();
   const navigate = useNavigate();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -186,17 +192,22 @@ export function FolderTree({ currentPath, currentFolder, hiddenOverrides = empty
   const resize = useSidebarResize({ storedWidth: preferences.leftSidebarWidth, config: folderSidebarWidth, edge: "right", reserveForOppositeSidebar: preferences.rightSidebarOpen, onCommit: commitWidth });
 
   const open = useCallback((folderPath: string) => {
-    navigate(`/browse?${query({ path: folderPath })}`);
+    navigate(`/browse?${query({ collection: activeCollectionId, path: folderPath })}`);
     onNavigate?.();
-  }, [navigate, onNavigate]);
+  }, [activeCollectionId, navigate, onNavigate]);
   const actions = useMemo(() => ({ onUpdateFolder, onEditAlias, onEditCollections }), [onEditAlias, onEditCollections, onUpdateFolder]);
   const hasActions = Boolean(onUpdateFolder && onEditAlias && onEditCollections);
   const rootPaths = useMemo(() => new Set(bootstrap?.roots.map((root) => root.path) ?? []), [bootstrap?.roots]);
   const visibleFavorites = bootstrap?.favorites.filter((favorite) => favorite.status === "ok" && (preferences.showHidden || !isEffectivelyHidden(favorite.path, favorite.hidden, hiddenOverrides))) ?? [];
+  const collectionFolders = collection?.folders.filter((folder) => preferences.showHidden || !isEffectivelyHidden(folder.path, folder.hidden, hiddenOverrides)) ?? [];
+  const activeCollectionRoot = currentPath ? mostSpecificCollectionRoot(currentPath, collectionFolders) : undefined;
   return (
     <aside ref={resize.sidebarRef} id="folder-sidebar" className={cx(sidebar.sidePanel, styles.leftPanel)} role={modal ? "dialog" : undefined} aria-modal={modal || undefined} aria-label="Folders" tabIndex={modal ? -1 : undefined} style={{ "--sidebar-width": `${resize.renderedWidth}px` } as CSSProperties} data-folder-tree-boundary>
-      <div className={sidebar.panelHeading}><span>Folders</span>{onClose ? <button className={cx(ui.iconButton, sidebar.panelClose, sidebar.mobileClose)} type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}</div>
-      {visibleFavorites.length ? (
+      <div className={sidebar.panelHeading}>
+        {onClose ? <button className={cx(ui.iconButton, sidebar.panelClose, sidebar.mobileClose, styles.folderPanelClose)} type="button" onClick={onClose} title="Close folders" aria-label="Close folders"><PanelLeftClose size={15} /></button> : null}
+        <CollectionPicker activeCollectionId={activeCollectionId} collections={collections} collection={collection} loading={collectionLoading} onChange={onCollectionChange} onRequestCollections={onRequestCollections} />
+      </div>
+      {activeCollectionId === null && visibleFavorites.length ? (
         <section className="border-b border-default pb-2">
           <h2 className={styles.panelSectionLabel}><FolderHeart size={12} /> Favorites</h2>
           {visibleFavorites.map((favorite) => {
@@ -210,17 +221,151 @@ export function FolderTree({ currentPath, currentFolder, hiddenOverrides = empty
           })}
         </section>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto py-1" role="tree" aria-label="Media roots" data-folder-tree-scroll>
-        {bootstrap?.roots.map((root) => {
+      <div className="min-h-0 flex-1 overflow-y-auto py-1" role="tree" aria-label={activeCollectionId === null ? "Media roots" : `${collection?.name ?? "Collection"} folders`} data-folder-tree-scroll>
+        {activeCollectionId === null ? bootstrap?.roots.map((root) => {
           const folder: FolderEntry = currentFolder?.path === root.path ? currentFolder : { path: root.path, name: root.label, displayName: root.label, hidden: false, favorite: false };
           return root.available ? <TreeNode key={root.id} folder={folder} depth={0} currentPath={currentPath} showHidden={preferences.showHidden} hiddenOverrides={hiddenOverrides} rootPaths={rootPaths} branchId={root.id} openMenuId={openMenuId} onOpenMenu={setOpenMenuId} onOpen={open} actions={actions} /> : (
             <div key={root.id} className={cx(styles.treeRow, "opacity-50")} title={`${root.path} is unavailable`}><HardDrive size={14} /><span className="truncate">{root.label}</span></div>
           );
-        })}
+        }) : collectionFolders.map((member) => member.status === "ready" ? (
+          <TreeNode
+            key={member.path}
+            folder={collectionFolderEntry(member, currentFolder)}
+            depth={0}
+            currentPath={activeCollectionRoot?.path === member.path ? currentPath : null}
+            showHidden={preferences.showHidden}
+            hiddenOverrides={hiddenOverrides}
+            rootPaths={rootPaths}
+            branchId={`collection:${activeCollectionId}:${member.path}`}
+            openMenuId={openMenuId}
+            onOpenMenu={setOpenMenuId}
+            onOpen={open}
+            actions={actions}
+          />
+        ) : <UnavailableCollectionFolder key={member.path} folder={member} />)}
+        {activeCollectionId !== null && collectionLoading && !collection ? <div className={styles.collectionEmpty}>Loading collection…</div> : null}
+        {activeCollectionId !== null && !collectionLoading && collection && collectionFolders.length === 0 ? <div className={styles.collectionEmpty}>
+          <Library size={18} />
+          <strong>{collection.folders.length ? "No visible folders" : "This collection is empty"}</strong>
+          <span>{collection.folders.length ? "Enable hidden folders to show its members." : "Add folders while browsing or manage the collection."}</span>
+          <Link to={`/collections/${collection.id}`}>Manage collection</Link>
+        </div> : null}
       </div>
       {!modal ? <div ref={resize.separatorRef} className={cx(sidebar.sidebarResizer, styles.folderSidebarResizer)} role="separator" aria-label="Resize folder sidebar" aria-orientation="vertical" aria-valuemin={folderSidebarWidth.min} aria-valuemax={resize.maximumWidth} aria-valuenow={resize.renderedWidth} aria-valuetext={`${resize.renderedWidth} pixels`} tabIndex={0} title="Resize folders" onPointerDown={resize.startResize} onPointerMove={resize.continueResize} onPointerUp={resize.endResize} onPointerCancel={resize.cancelResize} onKeyDown={resize.resizeWithKeyboard} /> : null}
     </aside>
   );
+}
+
+function CollectionPicker({ activeCollectionId, collections, collection, loading, onChange, onRequestCollections }: { activeCollectionId: number | null; collections: FolderCollection[]; collection: FolderCollectionDetail | null; loading: boolean; onChange?: (collectionId: number | null) => void; onRequestCollections?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const initialMenuFocus = useRef<"first" | "last">("first");
+  const activeSummary = collection ?? collections.find((candidate) => candidate.id === activeCollectionId);
+  const label = activeCollectionId === null ? "All folders" : activeSummary?.name ?? (loading ? "Loading collection…" : "Collection unavailable");
+
+  useEffect(() => {
+    if (!open) return;
+    const initialItems = menuRef.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]');
+    (initialMenuFocus.current === "last" ? initialItems?.[initialItems.length - 1] : initialItems?.[0])?.focus();
+    initialMenuFocus.current = "first";
+    const closeOutside = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setOpen(false);
+        triggerRef.current?.focus();
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? []);
+      if (!items.length) return;
+      event.preventDefault();
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+      const nextIndex = event.key === "Home" ? 0
+        : event.key === "End" ? items.length - 1
+          : event.key === "ArrowUp" ? (currentIndex <= 0 ? items.length - 1 : currentIndex - 1)
+            : currentIndex >= items.length - 1 ? 0 : currentIndex + 1;
+      items[nextIndex]?.focus();
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    window.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      window.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [open]);
+
+  const choose = (collectionId: number | null) => {
+    triggerRef.current?.focus();
+    setOpen(false);
+    onChange?.(collectionId);
+  };
+
+  const toggle = () => {
+    if (!open) onRequestCollections?.();
+    setOpen((value) => !value);
+  };
+
+  const openWithKeyboard = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    initialMenuFocus.current = event.key === "ArrowUp" ? "last" : "first";
+    onRequestCollections?.();
+    setOpen(true);
+  };
+
+  return <div ref={containerRef} className={styles.scopePicker}>
+    <button ref={triggerRef} className={cx(styles.scopeTrigger, activeCollectionId !== null && styles.collectionScope)} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`Folder scope: ${label}`} onClick={toggle} onKeyDown={openWithKeyboard}>
+      {activeCollectionId === null ? <Folders size={14} /> : <Library size={14} />}
+      <span className="truncate">{label}</span>
+      {activeCollectionId !== null && activeSummary ? <small>{activeSummary.folderCount}</small> : null}
+      <ChevronDown className={open ? "rotate-180" : undefined} size={13} />
+    </button>
+    {open ? <div ref={menuRef} className={styles.scopeMenu} role="menu" aria-label="Folder scope">
+      <button type="button" role="menuitemradio" aria-checked={activeCollectionId === null} onClick={() => choose(null)}><Folders size={14} /><span><strong>All folders</strong><small>Every media root</small></span>{activeCollectionId === null ? <Check size={13} /> : null}</button>
+      {loading && collections.length === 0 ? <div className={styles.scopeMenuStatus}>Loading collections…</div> : null}
+      {collections.length ? <div className={styles.scopeMenuDivider} /> : null}
+      {collections.map((candidate) => <button key={candidate.id} type="button" role="menuitemradio" aria-checked={activeCollectionId === candidate.id} onClick={() => choose(candidate.id)}><Library size={14} /><span><strong>{candidate.name}</strong><small>{formatFolderCount(candidate.folderCount)}</small></span>{activeCollectionId === candidate.id ? <Check size={13} /> : null}</button>)}
+      <div className={styles.scopeMenuDivider} />
+      <Link to="/collections" role="menuitem" onClick={() => setOpen(false)}><Settings2 size={14} /><span>Manage collections</span></Link>
+    </div> : null}
+  </div>;
+}
+
+function UnavailableCollectionFolder({ folder }: { folder: CollectionFolder }) {
+  const status = folder.status === "root-unavailable" ? "Root unavailable" : "Folder unavailable";
+  return <div className={cx(styles.treeRow, styles.unavailableMember)} role="treeitem" title={`${folder.path} — ${status}`} aria-disabled="true">
+    {folder.status === "root-unavailable" ? <HardDrive size={14} /> : <WifiOff size={14} />}
+    <span className="truncate">{folder.displayName}</span>
+    <small>{status}</small>
+  </div>;
+}
+
+function collectionFolderEntry(folder: CollectionFolder, currentFolder?: FolderEntry): FolderEntry {
+  return currentFolder?.path === folder.path ? currentFolder : {
+    path: folder.path,
+    name: folder.name,
+    displayName: folder.displayName,
+    hidden: folder.hidden,
+    favorite: folder.favorite,
+  };
+}
+
+function mostSpecificCollectionRoot(currentPath: string, folders: CollectionFolder[]) {
+  let result: CollectionFolder | undefined;
+  for (const folder of folders) {
+    if (folder.status !== "ready" || !isSameOrDescendantPath(currentPath, folder.path)) continue;
+    if (!result || folder.path.length > result.path.length) result = folder;
+  }
+  return result;
+}
+
+function formatFolderCount(count: number) {
+  return `${count.toLocaleString("en-US")} ${count === 1 ? "folder" : "folders"}`;
 }
 
 function isEffectivelyHidden(folderPath: string, fallback: boolean, overrides: ReadonlyMap<string, boolean>) {

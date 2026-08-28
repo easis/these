@@ -1,4 +1,21 @@
 .leftPanel { position: relative; width: var(--sidebar-width, 300px); border-right: 1px solid var(--border); }
+.scopePicker { position: relative; min-width: 0; flex: 1; order: 1; }
+.folderPanelClose { order: 2; }
+.scopeTrigger { width: 100%; min-width: 0; height: 29px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; color: var(--text-secondary); background: transparent; text-align: left; text-transform: none; letter-spacing: 0; cursor: pointer; }
+.scopeTrigger:hover, .scopeTrigger[aria-expanded="true"] { border-color: var(--border); color: var(--text-primary); background: var(--surface-hover); }
+.scopeTrigger.collectionScope { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 62%, transparent); }
+.scopeTrigger small { min-width: 19px; color: var(--text-muted); font-size: var(--font-ui-xs); text-align: right; }
+.scopeTrigger > svg:last-child { color: var(--text-muted); transition: transform 100ms ease; }
+.scopeMenu { position: absolute; z-index: 60; top: calc(100% + 4px); left: -5px; width: min(280px, calc(var(--sidebar-width, 300px) - 12px)); max-height: min(430px, calc(100vh - 96px)); padding: 4px; overflow-y: auto; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); box-shadow: 0 14px 36px rgb(0 0 0 / 22%); text-transform: none; letter-spacing: 0; }
+.scopeMenu button, .scopeMenu > a { width: 100%; min-height: 42px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 16px; align-items: center; gap: 7px; padding: 5px 7px; border: 0; border-radius: 5px; color: var(--text-secondary); background: transparent; text-align: left; text-decoration: none; cursor: pointer; }
+.scopeMenu button:hover, .scopeMenu button:focus-visible, .scopeMenu > a:hover, .scopeMenu > a:focus-visible { color: var(--text-primary); background: var(--surface-hover); }
+.scopeMenu button[aria-checked="true"] { color: var(--accent); background: var(--accent-soft); }
+.scopeMenu button > span { min-width: 0; display: grid; gap: 2px; }
+.scopeMenu strong, .scopeMenu small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scopeMenu strong { font-size: var(--font-ui-md); font-weight: 650; }
+.scopeMenu small { color: var(--text-muted); font-size: var(--font-ui-xs); }
+.scopeMenuDivider { height: 1px; margin: 4px 3px; background: var(--border); }
+.scopeMenuStatus { min-height: 34px; display: flex; align-items: center; padding: 0 25px; color: var(--text-muted); font-size: var(--font-ui-xs); }
 .panelSectionLabel { height: 27px; display: flex; align-items: center; gap: 5px; margin: 0; padding: 0 9px; color: var(--text-muted); font-size: var(--font-ui-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .favoriteItem { width: calc(100% - 12px); min-width: 0; height: 27px; display: flex; align-items: center; margin: 0 6px; }
 .favoriteRow { min-width: 0; height: 25px; flex: 1; display: block; padding: 0 7px; overflow: hidden; border: 0; border-radius: 4px; color: var(--text-secondary); background: transparent; text-align: left; font-size: var(--font-ui-md); cursor: pointer; }
@@ -27,10 +44,23 @@
 .treeMenu button:disabled { cursor: not-allowed; opacity: .4; }
 .treeMenu button svg { color: var(--text-muted); }
 .treeMenu button:first-child svg { color: var(--maybe); }
+.unavailableMember { gap: 6px; padding: 0 7px 0 11px; opacity: .58; }
+.unavailableMember > svg { flex: none; }
+.unavailableMember > span { min-width: 0; flex: 1; }
+.unavailableMember small { flex: none; color: var(--text-muted); font-size: var(--font-ui-2xs); }
+.collectionEmpty { min-height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 20px; color: var(--text-muted); text-align: center; }
+.collectionEmpty > svg { color: var(--accent); opacity: .72; }
+.collectionEmpty strong { color: var(--text-secondary); font-size: var(--font-ui-md); }
+.collectionEmpty span { max-width: 210px; font-size: var(--font-ui-xs); line-height: 1.45; }
+.collectionEmpty a { margin-top: 3px; color: var(--accent); font-size: var(--font-ui-sm); font-weight: 650; text-decoration: none; }
+.collectionEmpty a:hover { text-decoration: underline; }
 .folderSidebarResizer { right: -6px; }
 
 @media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
   .leftPanel { position: absolute; z-index: 40; left: 0; top: 0; bottom: 0; width: min(86vw, 330px); box-shadow: 8px 0 18px rgb(0 0 0 / 8%); }
+  .scopeTrigger { min-height: 44px; height: 44px; padding-inline: 8px; font-size: var(--font-ui-lg); }
+  .scopeMenu { top: calc(100% + 3px); left: 0; width: min(294px, calc(86vw - 18px)); max-height: min(62dvh, 470px); }
+  .scopeMenu button, .scopeMenu > a { min-height: 48px; }
   .favoriteItem { min-height: 44px; height: auto; }
   .favoriteRow { min-height: 44px; display: flex; align-items: center; padding-inline: 10px; }
   .treeRow { min-height: 44px; height: auto; }

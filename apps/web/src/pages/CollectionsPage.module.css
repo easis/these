@@ -12,7 +12,7 @@
 .detailTitle { align-items: flex-end; border-bottom: 1px solid var(--border); padding-bottom: 19px; }
 .titleLine { display: flex; align-items: center; gap: 9px; }
 .titleLine h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.titleActions { display: flex; gap: 5px; }
+.titleActions { display: flex; flex-wrap: wrap; gap: 5px; }
 .folderShelf { display: grid; gap: 7px; }
 .folderRow { min-width: 0; min-height: 62px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 .folderRow:hover { border-color: var(--border-strong); background: var(--surface-secondary); }

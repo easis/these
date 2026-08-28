@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
-import type { BrowseResponse, TheseList } from "@these/shared";
+import type { BrowseResponse, FolderCollectionDetail, TheseList } from "@these/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import shellStyles from "../components/AppShell.module.css";
 import mediaTileStyles from "../components/MediaTile.module.css";
 import viewerStyles from "../components/Viewer.module.css";
+import { ApiRequestError } from "../lib/api";
 import { BrowsePage } from "./BrowsePage";
 import styles from "./BrowsePage.module.css";
 
@@ -23,6 +24,8 @@ const mocks = vi.hoisted(() => ({
     rightSidebarOpen: false,
     showHidden: false,
     lastFolder: null as string | null,
+    activeCollectionId: null as number | null,
+    collectionLastFolders: {} as Record<string, string>,
   },
 }));
 
@@ -76,6 +79,8 @@ describe("BrowsePage requests", () => {
       rightSidebarOpen: false,
       showHidden: false,
       lastFolder: null,
+      activeCollectionId: null,
+      collectionLastFolders: {},
     });
   });
 
@@ -1021,11 +1026,232 @@ describe("BrowsePage requests", () => {
       body: JSON.stringify({ path: dogs.path, collectionIds: [5] }),
     })));
   });
+
+  it("uses a collection member as the strict breadcrumb root and retains scope while navigating", async () => {
+    mocks.preferences.leftSidebarOpen = true;
+    const collection = collectionDetail(5, "Client selects", [
+      { path: "/media/dogs", name: "dogs", displayName: "Dog sets", hidden: false, favorite: false, status: "ready" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([{ ...collection, folders: undefined }].map(({ folders: _, ...summary }) => summary));
+      if (url === "/api/collections/5") return Promise.resolve(collection);
+      if (url.startsWith("/api/browse?")) {
+        const folderPath = new URL(url, "http://these.test").searchParams.get("path")!;
+        return Promise.resolve(browseResponse(folderPath, 0, {
+          currentFolder: { path: folderPath, name: folderPath.split("/").pop()!, displayName: folderPath.endsWith("puppies") ? "Puppies" : folderPath.split("/").pop()!, hidden: false, favorite: false },
+          folders: folderPath.endsWith("puppies") ? [{ path: `${folderPath}/day-one`, name: "day-one", displayName: "Day one", hidden: false, favorite: false }] : [],
+        }));
+      }
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?collection=5&path=%2Fmedia%2Fdogs%2Fpuppies"]}><BrowsePage /><LocationProbe /></MemoryRouter>);
+
+    expect(await screen.findByRole("button", { name: "Folder scope: Client selects" })).toBeInTheDocument();
+    const breadcrumbs = screen.getByRole("navigation", { name: "Folder path" });
+    await within(breadcrumbs).findByRole("button", { name: "Puppies" });
+    expect(within(breadcrumbs).getAllByRole("button").map((button) => button.textContent)).toEqual(["Dog sets", "Puppies"]);
+    expect(within(breadcrumbs).queryByRole("button", { name: "Library" })).not.toBeInTheDocument();
+    fireEvent.click(within(document.querySelector<HTMLElement>(`.${styles.folderGrid}`)!).getByRole("button", { name: "Day one" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/browse?collection=5&path=%2Fmedia%2Fdogs%2Fpuppies%2Fday-one");
+  });
+
+  it("restores the last valid folder for a collection and repairs paths outside its members", async () => {
+    mocks.preferences.collectionLastFolders = { 5: "/media/cats" };
+    const collection = collectionDetail(5, "Animals", [
+      { path: "/media/dogs", name: "dogs", displayName: "Dogs", hidden: false, favorite: false, status: "ready" },
+      { path: "/media/cats", name: "cats", displayName: "Cats", hidden: false, favorite: false, status: "ready" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([{ id: 5, name: "Animals", folderCount: 2, createdAt: "", updatedAt: "" }]);
+      if (url === "/api/collections/5") return Promise.resolve(collection);
+      if (url.startsWith("/api/browse?")) {
+        const folderPath = new URL(url, "http://these.test").searchParams.get("path")!;
+        return Promise.resolve(browseResponse(folderPath, 0));
+      }
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    const { unmount } = render(<MemoryRouter initialEntries={["/browse?collection=5"]}><BrowsePage /><LocationProbe /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?collection=5&path=%2Fmedia%2Fcats"));
+    unmount();
+
+    mocks.preferences.collectionLastFolders = {};
+    render(<MemoryRouter initialEntries={["/browse?collection=5&path=%2Fmedia%2Fhorses"]}><BrowsePage /><LocationProbe /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?collection=5&path=%2Fmedia%2Fdogs"));
+  });
+
+  it("loads collection choices on demand and switches to the selected workspace", async () => {
+    mocks.preferences.leftSidebarOpen = true;
+    const collection = collectionDetail(5, "Dogs", [
+      { path: "/media/dogs", name: "dogs", displayName: "Dogs", hidden: false, favorite: false, status: "ready" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([{ id: 5, name: "Dogs", folderCount: 1, createdAt: "", updatedAt: "" }]);
+      if (url === "/api/collections/5") return Promise.resolve(collection);
+      if (url.startsWith("/api/browse?")) {
+        const folderPath = new URL(url, "http://these.test").searchParams.get("path")!;
+        return Promise.resolve(browseResponse(folderPath, 0));
+      }
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /><LocationProbe /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Folder scope: All folders" }));
+    const dogs = await screen.findByRole("menuitemradio", { name: /Dogs/ });
+    fireEvent.click(dogs);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?collection=5&path=%2Fmedia%2Fdogs"));
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ activeCollectionId: 5 });
+  });
+
+  it("does not reload the active collection when opening an already populated picker", async () => {
+    mocks.preferences.leftSidebarOpen = true;
+    const collection = collectionDetail(5, "Dogs", [
+      { path: "/media/dogs", name: "dogs", displayName: "Dogs", hidden: false, favorite: false, status: "ready" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([{ id: 5, name: "Dogs", folderCount: 1, createdAt: "", updatedAt: "" }]);
+      if (url === "/api/collections/5") return Promise.resolve(collection);
+      if (url.startsWith("/api/browse?")) return Promise.resolve(browseResponse("/media/dogs", 0));
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?collection=5&path=%2Fmedia%2Fdogs"]}><BrowsePage /></MemoryRouter>);
+    const trigger = await screen.findByRole("button", { name: "Folder scope: Dogs" });
+    await waitFor(() => expect(mocks.api.mock.calls.filter(([url]) => url === "/api/collections/5")).toHaveLength(1));
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu", { name: "Folder scope" })).toBeInTheDocument();
+    await act(async () => Promise.resolve());
+    expect(mocks.api.mock.calls.filter(([url]) => url === "/api/collections/5")).toHaveLength(1);
+  });
+
+  it("does not refetch a folder after persisting it as the last collection location", async () => {
+    const collection = collectionDetail(5, "Dogs", [
+      { path: "/media/dogs", name: "dogs", displayName: "Dogs", hidden: false, favorite: false, status: "ready" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([{ id: 5, name: "Dogs", folderCount: 1, createdAt: "", updatedAt: "" }]);
+      if (url === "/api/collections/5") return Promise.resolve(collection);
+      if (url.startsWith("/api/browse?")) return Promise.resolve(browseResponse("/media/dogs", 0));
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    const view = render(<MemoryRouter initialEntries={["/browse?collection=5&path=%2Fmedia%2Fdogs"]}><BrowsePage /></MemoryRouter>);
+    await waitFor(() => expect(mocks.setPreferences).toHaveBeenCalledWith(expect.objectContaining({ collectionLastFolders: { 5: "/media/dogs" } })));
+    expect(mocks.api.mock.calls.filter(([url]) => url.startsWith("/api/browse?"))).toHaveLength(1);
+
+    mocks.preferences.collectionLastFolders = { 5: "/media/dogs" };
+    view.rerender(<MemoryRouter initialEntries={["/browse?collection=5&path=%2Fmedia%2Fdogs"]}><BrowsePage /></MemoryRouter>);
+    await act(async () => Promise.resolve());
+    expect(mocks.api.mock.calls.filter(([url]) => url.startsWith("/api/browse?"))).toHaveLength(1);
+  });
+
+  it("keeps a bare all-folders entry distinct when returning through browser history", async () => {
+    mocks.preferences.leftSidebarOpen = true;
+    const collection = collectionDetail(5, "Dogs", [
+      { path: "/media/dogs", name: "dogs", displayName: "Dogs", hidden: false, favorite: false, status: "ready" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([{ id: 5, name: "Dogs", folderCount: 1, createdAt: "", updatedAt: "" }]);
+      if (url === "/api/collections/5") return Promise.resolve(collection);
+      if (url.startsWith("/api/browse?")) {
+        const folderPath = new URL(url, "http://these.test").searchParams.get("path")!;
+        return Promise.resolve(browseResponse(folderPath, 0));
+      }
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse"]}><BackNavigationHarness /><BrowsePage /><LocationProbe /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?path=%2Fmedia"));
+    fireEvent.click(screen.getByRole("button", { name: "Folder scope: All folders" }));
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: /Dogs/ }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?collection=5&path=%2Fmedia%2Fdogs"));
+
+    mocks.preferences.activeCollectionId = 5;
+    mocks.preferences.collectionLastFolders = { 5: "/media/dogs" };
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?path=%2Fmedia"));
+  });
+
+  it("ignores a stale collection detail after switching workspaces quickly", async () => {
+    const dogs = deferred<FolderCollectionDetail>();
+    const cats = collectionDetail(6, "Cats", [
+      { path: "/media/cats", name: "cats", displayName: "Cats", hidden: false, favorite: false, status: "ready" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([
+        { id: 5, name: "Dogs", folderCount: 1, createdAt: "", updatedAt: "" },
+        { id: 6, name: "Cats", folderCount: 1, createdAt: "", updatedAt: "" },
+      ]);
+      if (url === "/api/collections/5") return dogs.promise;
+      if (url === "/api/collections/6") return Promise.resolve(cats);
+      if (url.startsWith("/api/browse?")) {
+        const folderPath = new URL(url, "http://these.test").searchParams.get("path")!;
+        return Promise.resolve(browseResponse(folderPath, 0));
+      }
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?collection=5&path=%2Fmedia%2Fdogs"]}><CollectionNavigationHarness /><LocationProbe /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Open Cats collection" }));
+    expect(await screen.findByTestId("location")).toHaveTextContent("/browse?collection=6&path=%2Fmedia%2Fcats");
+    await waitFor(() => expect(mocks.setPreferences).toHaveBeenCalledWith({ activeCollectionId: 6 }));
+    await act(async () => dogs.resolve(collectionDetail(5, "Dogs", [
+      { path: "/media/dogs", name: "dogs", displayName: "Dogs", hidden: false, favorite: false, status: "ready" },
+    ])));
+    expect(screen.getByTestId("location")).toHaveTextContent("/browse?collection=6&path=%2Fmedia%2Fcats");
+    expect(mocks.setPreferences).not.toHaveBeenCalledWith({ activeCollectionId: 5 });
+  });
+
+  it("returns to all folders with a notice when the active collection was deleted", async () => {
+    mocks.preferences.activeCollectionId = 5;
+    mocks.preferences.collectionLastFolders = { 5: "/media/dogs" };
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([]);
+      if (url === "/api/collections/5") return Promise.reject(new ApiRequestError("Collection not found.", "COLLECTION_NOT_FOUND"));
+      if (url.startsWith("/api/browse?")) return Promise.resolve(browseResponse("/media/dogs", 0));
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?collection=5&path=%2Fmedia%2Fdogs"]}><BrowsePage /><LocationProbe /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browse?path=%2Fmedia%2Fdogs"));
+    expect(screen.getByText("That collection no longer exists. Showing all folders.")).toBeInTheDocument();
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ activeCollectionId: null, collectionLastFolders: {} });
+  });
+
+  it("distinguishes unavailable collection members from an empty collection", async () => {
+    const collection = collectionDetail(5, "Archive", [
+      { path: "/offline/archive", name: "archive", displayName: "Archive", hidden: false, favorite: false, status: "root-unavailable" },
+    ]);
+    mocks.api.mockImplementation((url: string) => {
+      if (url === "/api/collections") return Promise.resolve([{ id: 5, name: "Archive", folderCount: 1, createdAt: "", updatedAt: "" }]);
+      if (url === "/api/collections/5") return Promise.resolve(collection);
+      throw new Error(`Unexpected API call: ${url}`);
+    });
+
+    render(<MemoryRouter initialEntries={["/browse?collection=5"]}><BrowsePage /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "No folders are available" })).toBeInTheDocument();
+    expect(screen.getByText("Reconnect the media source or update Archive to continue browsing.")).toBeInTheDocument();
+    expect(screen.queryByText("No media in this folder.")).not.toBeInTheDocument();
+  });
 });
 
 function NavigationHarness() {
   const navigate = useNavigate();
   return <><button type="button" onClick={() => navigate("/browse?path=%2Fmedia%2Fnew")}>Open new folder</button><BrowsePage /></>;
+}
+
+function CollectionNavigationHarness() {
+  const navigate = useNavigate();
+  return <><button type="button" onClick={() => navigate("/browse?collection=6&path=%2Fmedia%2Fcats")}>Open Cats collection</button><BrowsePage /></>;
+}
+
+function BackNavigationHarness() {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate(-1)}>Back</button>;
 }
 
 function LocationProbe() {
@@ -1073,6 +1299,10 @@ function mediaEntry(path: string): BrowseResponse["media"][number] {
 
 function list(id: number, name: string): TheseList {
   return { id, name, selectedCount: 0, maybeCount: 0, createdAt: "", updatedAt: "" };
+}
+
+function collectionDetail(id: number, name: string, folders: FolderCollectionDetail["folders"]): FolderCollectionDetail {
+  return { id, name, folderCount: folders.length, createdAt: "", updatedAt: "", folders };
 }
 
 function deferred<T>() {

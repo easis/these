@@ -36,13 +36,14 @@ describe("CollectionPage", () => {
   it("opens ready folders, marks unavailable roots and removes membership only", async () => {
     render(<MemoryRouter initialEntries={["/collections/7"]}><Routes><Route path="/collections/:id" element={<CollectionPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Dogs" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Beagles/ })).toHaveAttribute("href", "/browse?path=%2Fmedia%2Fbeagles");
+    expect(screen.getByRole("link", { name: "Browse collection" })).toHaveAttribute("href", "/browse?collection=7");
+    expect(screen.getByRole("link", { name: /Beagles/ })).toHaveAttribute("href", "/browse?collection=7&path=%2Fmedia%2Fbeagles");
     expect(screen.getByText("Root unavailable")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Huskies/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Remove Beagles from Dogs" }));
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith(expect.stringContaining("/api/collections/7/folders?"), { method: "DELETE" }));
     expect(screen.queryByText("Beagles")).not.toBeInTheDocument();
-    expect(screen.getByText("1 folder, each opening in the regular browser.")).toBeInTheDocument();
+    expect(screen.getByText("1 folder available as a focused Browse workspace.")).toBeInTheDocument();
   });
 
   it("ignores a stale response after navigating to another collection", async () => {

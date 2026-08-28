@@ -12,7 +12,20 @@ describe("local preferences", () => {
       leftSidebarOpen: false,
       leftSidebarWidth: folderSidebarWidth.default,
       rightSidebarWidth: listSidebarWidth.default,
+      activeCollectionId: null,
+      collectionLastFolders: {},
     });
+  });
+
+  it("restores valid collection navigation and ignores malformed saved values", () => {
+    localStorage.setItem("these.preferences.v1", JSON.stringify({
+      activeCollectionId: 7,
+      collectionLastFolders: { 7: "/media/dogs", bad: 14, 9: "" },
+    }));
+    expect(readPreferences()).toMatchObject({ activeCollectionId: 7, collectionLastFolders: { 7: "/media/dogs" } });
+
+    localStorage.setItem("these.preferences.v1", JSON.stringify({ activeCollectionId: -1, collectionLastFolders: [] }));
+    expect(readPreferences()).toMatchObject({ activeCollectionId: null, collectionLastFolders: {} });
   });
 
   it("clamps invalid and out-of-range saved widths", () => {

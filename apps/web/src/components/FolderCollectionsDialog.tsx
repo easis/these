@@ -7,7 +7,7 @@ import { cx } from "../lib/cx";
 import ui from "../styles/ui.module.css";
 import styles from "./FolderCollectionsDialog.module.css";
 
-export function FolderCollectionsDialog({ folder, onClose }: { folder: FolderEntry; onClose: () => void }) {
+export function FolderCollectionsDialog({ folder, onClose, onSaved }: { folder: FolderEntry; onClose: () => void; onSaved?: () => void }) {
   const [collections, setCollections] = useState<FolderCollection[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [newName, setNewName] = useState("");
@@ -79,6 +79,7 @@ export function FolderCollectionsDialog({ folder, onClose }: { folder: FolderEnt
         method: "PUT",
         body: JSON.stringify({ path: folder.path, collectionIds: [...selectedIds] }),
       });
+      onSaved?.();
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not update collection membership.");
