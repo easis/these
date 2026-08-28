@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjacentZoomLevel, clampImagePan, imageFitScale } from "./image-zoom";
+import { adjacentZoomLevel, clampImagePan, imageFitScale, imagePanForZoom } from "./image-zoom";
 
 describe("image zoom math", () => {
   it("fits images without exceeding 400 percent", () => {
@@ -17,5 +17,10 @@ describe("image zoom math", () => {
   it("clamps panning to the image overflow on each axis", () => {
     expect(clampImagePan({ x: 999, y: -999 }, { width: 1000, height: 500 }, { width: 600, height: 600 }, 1)).toEqual({ x: 200, y: 0 });
     expect(clampImagePan({ x: -90, y: 50 }, { width: 1000, height: 500 }, { width: 600, height: 600 }, 2)).toEqual({ x: -90, y: 50 });
+  });
+
+  it("keeps the image point beneath the cursor fixed while zooming", () => {
+    expect(imagePanForZoom({ x: 0, y: 0 }, { x: 100, y: 50 }, 1, 2)).toEqual({ x: -100, y: -50 });
+    expect(imagePanForZoom({ x: -100, y: -50 }, { x: 100, y: 50 }, 2, 1)).toEqual({ x: 0, y: 0 });
   });
 });

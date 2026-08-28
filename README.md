@@ -52,7 +52,7 @@ The three-pane browser keeps the folder tree, media gallery, and active list in 
 
 ### Inspect and classify without breaking your flow
 
-Open an image or video in the focused viewer, move through the folder with the arrow keys, and use `1`, `2`, `3`, or `0` to update the active list. Images can be fitted, viewed at actual size, zoomed, and panned. Technical metadata is fetched only when the details panel is opened.
+Open an image or video in the focused viewer, move through the folder with the arrow keys, and use `1`, `2`, `3`, or `0` to update the active list. Images can be fitted, viewed at actual size, zoomed around the pointer with the mouse wheel, reset to fit with a middle click, and panned. Technical metadata is fetched only when the details panel is opened.
 
 ![The focused media viewer with Selected, Maybe, and Discarded controls](docs/assets/screenshots/viewer.jpg)
 

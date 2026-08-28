@@ -13,6 +13,15 @@ export function adjacentZoomLevel(scale: number, direction: 1 | -1) {
   return [...zoomLevels].reverse().find((level) => level < scale - 0.001) ?? zoomLevels[0];
 }
 
+export function imagePanForZoom(pan: Point2D, anchor: Point2D, currentScale: number, nextScale: number): Point2D {
+  if (currentScale <= 0 || currentScale === nextScale) return pan;
+  const ratio = nextScale / currentScale;
+  return {
+    x: anchor.x - (anchor.x - pan.x) * ratio,
+    y: anchor.y - (anchor.y - pan.y) * ratio,
+  };
+}
+
 export function clampImagePan(pan: Point2D, image: Size2D, viewport: Size2D, scale: number): Point2D {
   const limitX = Math.max(0, (image.width * scale - viewport.width) / 2);
   const limitY = Math.max(0, (image.height * scale - viewport.height) / 2);
