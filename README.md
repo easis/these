@@ -60,6 +60,8 @@ Open an image or video in the focused viewer, move through the folder with the a
 
 Each list separates confident picks, second-pass candidates, and recoverable discards. Items can move between groups or be unclassified inline. The list index can be searched, filtered, and sorted, while ZIP downloads stream directly from the mounted originals.
 
+![The Lists page with search, filters, sorting, and three review-state counts](docs/assets/screenshots/lists-index.jpg)
+
 ![A list review with Selected, Maybe, and collapsed Discarded groups](docs/assets/screenshots/lists.jpg)
 
 ## How it works
@@ -183,6 +185,8 @@ Use inline actions while browsing, or open **Folders** to search and repair meta
 ### Folder collections
 
 A collection groups related folders without moving or copying their contents. Open **Collections** to create and manage groups, or use **Add to collections** on the current folder or any child folder while browsing. One folder can belong to several collections. Collection and list indexes can both be searched, filtered, and sorted.
+
+![The Collections page filtered to collections with folders](docs/assets/screenshots/collections.jpg)
 
 Opening a collection shows its member folders as shortcuts into the regular browser. The folder-tree scope picker also lets you stay inside a collection while moving between its member folders and descendants. Members are sorted by their visible alias or folder name. If an entire media root or an individual folder is temporarily inaccessible, its membership is retained and marked unavailable. If the root is available but a member folder has been definitively removed—or its stored path is no longer inside any configured root—the stale membership is removed automatically the next time collections are loaded.
 
