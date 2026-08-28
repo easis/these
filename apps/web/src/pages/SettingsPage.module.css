@@ -11,13 +11,15 @@
 .densitySetting button { min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--surface); cursor: pointer; }
 .densitySetting button.active { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--accent); background: var(--accent-soft); }
 .settingsRoots { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface); }
-.rootForm { display: grid; grid-template-columns: 120px minmax(180px, 1fr) auto auto; align-items: end; gap: 7px; margin-bottom: 10px; }
+.rootForm { display: grid; grid-template-columns: 120px minmax(180px, 1fr) auto auto; align-items: end; column-gap: 7px; row-gap: 4px; margin-bottom: 10px; }
 .rootForm label { display: grid; gap: 4px; color: var(--text-muted); font-size: var(--font-ui-2xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .rootForm input { width: 100%; height: 28px; padding: 0 7px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); background: var(--surface); font-size: var(--font-ui-sm); }
 .rootPathField input { font-family: ui-monospace, monospace; font-size: var(--font-ui-xs); }
-.rootPathField small { color: var(--text-muted); font-size: var(--font-ui-2xs); font-weight: 500; letter-spacing: 0; line-height: 1.4; text-transform: none; }
-.rootPathField .fieldError { color: var(--danger); }
+.rootPathHelp { grid-column: 2; grid-row: 2; display: grid; gap: 2px; color: var(--text-muted); font-size: var(--font-ui-2xs); line-height: 1.4; }
+.rootPathHelp .fieldError { color: var(--danger); }
 .rootPathField input[aria-invalid="true"] { border-color: var(--danger); }
+.rootSubmit { grid-column: 3; grid-row: 1; }
+.rootCancel { grid-column: 4; grid-row: 1; }
 .settingsSection .rootError { margin: 0 0 10px; }
 .rootRow { min-height: 40px; display: grid; grid-template-columns: 10px 90px minmax(0, 1fr) auto 54px; align-items: center; gap: 7px; padding: 6px 9px; border-bottom: 1px solid var(--border); font-size: var(--font-ui-xs); }
 .rootRow:last-child { border-bottom: 0; }
@@ -31,6 +33,9 @@
 @media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
   .rootForm { grid-template-columns: 1fr auto; }
   .rootForm label { grid-column: 1 / -1; }
+  .rootPathHelp { grid-column: 1 / -1; grid-row: auto; }
+  .rootSubmit { grid-column: 1; grid-row: auto; justify-self: start; }
+  .rootCancel { grid-column: 2; grid-row: auto; }
   .rootRow { grid-template-columns: 10px 1fr auto; }
   .rootRow code { grid-column: 2 / -1; grid-row: 2; }
   .rootActions { grid-column: 2 / -1; justify-content: flex-start; }

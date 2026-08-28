@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "./SettingsPage";
+import styles from "./SettingsPage.module.css";
 
 const mocks = vi.hoisted(() => ({
   api: vi.fn(async () => undefined),
@@ -72,5 +73,14 @@ describe("SettingsPage media roots", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Use an absolute application path");
     expect(screen.getByRole("button", { name: "Add root" })).toBeDisabled();
     expect(mocks.api).not.toHaveBeenCalled();
+  });
+
+  it("keeps path help on its own grid row so fields and actions align", () => {
+    render(<SettingsPage />);
+    const pathInput = screen.getByLabelText("Path in These");
+    const helper = screen.getByText(/The application-visible path/);
+    expect(pathInput.closest("label")).not.toContainElement(helper);
+    expect(helper.parentElement).toHaveClass(styles.rootPathHelp!);
+    expect(screen.getByRole("button", { name: "Add root" })).toHaveClass(styles.rootSubmit!);
   });
 });
