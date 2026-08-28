@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   preferences: {
     theme: "light",
     thumbnailSize: 180,
+    mobileGalleryDensity: "compact" as const,
     leftSidebarOpen: false,
     rightSidebarOpen: false,
     showHidden: false,
@@ -75,6 +76,7 @@ describe("BrowsePage requests", () => {
     Object.assign(mocks.preferences, {
       theme: "light",
       thumbnailSize: 180,
+      mobileGalleryDensity: "compact",
       leftSidebarOpen: false,
       rightSidebarOpen: false,
       showHidden: false,
@@ -208,14 +210,33 @@ describe("BrowsePage requests", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Hidden folders/ }));
     expect(mocks.setPreferences).toHaveBeenCalledWith({ showHidden: true });
-    fireEvent.change(screen.getByLabelText("Thumbnail size"), { target: { value: "220" } });
-    expect(mocks.setPreferences).toHaveBeenCalledWith({ thumbnailSize: 220 });
+    fireEvent.click(screen.getByRole("button", { name: "Comfortable" }));
+    expect(mocks.setPreferences).toHaveBeenCalledWith({ mobileGalleryDensity: "comfortable" });
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Browser options" })).not.toBeInTheDocument();
     expect(document.querySelector(`.${shellStyles.appHeader}`)).not.toHaveAttribute("inert");
     expect(document.querySelector(`.${shellStyles.mobileNavigation}`)).not.toHaveAttribute("inert");
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("uses two compact columns at a 390px mobile viewport and persists the density toggle", async () => {
+    const compactViewport = { matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    vi.stubGlobal("matchMedia", vi.fn(() => compactViewport));
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(376);
+    mocks.api.mockResolvedValue(browseResponse("/media", 4, { media: [
+      mediaEntry("/media/one.jpg"), mediaEntry("/media/two.jpg"), mediaEntry("/media/three.jpg"), mediaEntry("/media/four.jpg"),
+    ] }));
+    try {
+      render(<MemoryRouter initialEntries={["/browse?path=%2Fmedia"]}><BrowsePage /></MemoryRouter>);
+      expect(await screen.findByText("one.jpg")).toBeInTheDocument();
+      const row = document.querySelector<HTMLElement>(`.${styles.virtualGalleryScroll} > div > div`)!;
+      expect(row.style.gridTemplateColumns).toContain("repeat(2");
+      fireEvent.click(screen.getByRole("button", { name: "Use comfortable gallery density" }));
+      expect(mocks.setPreferences).toHaveBeenCalledWith({ mobileGalleryDensity: "comfortable" });
+    } finally {
+      width.mockRestore();
+    }
   });
 
   it("does not let a slow response from the previous folder replace the current one", async () => {
@@ -1298,7 +1319,7 @@ function mediaEntry(path: string): BrowseResponse["media"][number] {
 }
 
 function list(id: number, name: string): TheseList {
-  return { id, name, selectedCount: 0, maybeCount: 0, createdAt: "", updatedAt: "" };
+  return { id, name, selectedCount: 0, maybeCount: 0, discardedCount: 0, createdAt: "", updatedAt: "" };
 }
 
 function collectionDetail(id: number, name: string, folders: FolderCollectionDetail["folders"]): FolderCollectionDetail {

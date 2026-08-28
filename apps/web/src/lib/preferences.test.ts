@@ -12,9 +12,17 @@ describe("local preferences", () => {
       leftSidebarOpen: false,
       leftSidebarWidth: folderSidebarWidth.default,
       rightSidebarWidth: listSidebarWidth.default,
+      mobileGalleryDensity: "compact",
       activeCollectionId: null,
       collectionLastFolders: {},
     });
+  });
+
+  it("restores only valid mobile gallery density values", () => {
+    localStorage.setItem("these.preferences.v1", JSON.stringify({ mobileGalleryDensity: "comfortable" }));
+    expect(readPreferences().mobileGalleryDensity).toBe("comfortable");
+    localStorage.setItem("these.preferences.v1", JSON.stringify({ mobileGalleryDensity: "dense" }));
+    expect(readPreferences().mobileGalleryDensity).toBe("compact");
   });
 
   it("restores valid collection navigation and ignores malformed saved values", () => {

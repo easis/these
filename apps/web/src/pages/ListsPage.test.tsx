@@ -13,8 +13,8 @@ vi.mock("../state/app-context", () => ({
   useApp: () => ({
     bootstrap: {
       lists: [
-        { id: 7, name: "Large archive", selectedCount: 1240, maybeCount: 12, createdAt: "", updatedAt: "" },
-        { id: 8, name: "Empty list", selectedCount: 0, maybeCount: 0, createdAt: "", updatedAt: "" },
+        { id: 7, name: "Large archive", selectedCount: 1240, maybeCount: 12, discardedCount: 3, createdAt: "", updatedAt: "" },
+        { id: 8, name: "Empty list", selectedCount: 0, maybeCount: 0, discardedCount: 0, createdAt: "", updatedAt: "" },
       ],
     },
     activeList: null,

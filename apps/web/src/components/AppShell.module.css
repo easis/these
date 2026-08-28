@@ -18,7 +18,7 @@
 .themeSwitcher button.themeActive { color: var(--accent); background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
 
 @media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
-  .appHeader { height: calc(46px + env(safe-area-inset-top)); gap: 8px; padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); }
+  .appHeader { height: calc(54px + env(safe-area-inset-top)); gap: 8px; padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); }
   .mainNavigation { display: none; }
   .mobileNavigation { z-index: 30; min-height: calc(58px + env(safe-area-inset-bottom)); flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 4px max(8px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 -8px 24px rgb(0 0 0 / 5%); }
   .mobileNavigation .navLink { position: relative; min-width: 0; height: 50px; flex-direction: column; justify-content: center; gap: 2px; padding: 5px 3px 3px; border-radius: 7px; font-size: var(--font-ui-xs); font-weight: 650; }
@@ -26,4 +26,5 @@
   .mobileNavigation .navLinkActive { color: var(--accent); background: var(--accent-soft); }
   .mobileNavigation .navLinkActive::before { background: var(--accent); }
   .mobileNavigation .navLink svg { width: 17px; height: 17px; }
+  .themeSwitcher button { width: 44px; height: 44px; }
 }

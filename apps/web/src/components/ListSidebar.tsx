@@ -1,4 +1,4 @@
-import { Check, CircleHelp, PanelRightClose, Plus, Settings2 } from "lucide-react";
+import { Check, CircleHelp, CircleX, PanelRightClose, Plus, Settings2 } from "lucide-react";
 import { useCallback, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { cx } from "../lib/cx";
@@ -56,6 +56,7 @@ export function ListSidebar({ onClose, onSelection, modal = false }: { onClose?:
                   <span className={cx(styles.listSelectCounts, "mt-0.5 flex items-center gap-2 text-muted")}>
                     <span className="inline-flex items-center gap-1"><Check size={11} />{list.selectedCount}</span>
                     <span className="inline-flex items-center gap-1"><CircleHelp size={11} />{list.maybeCount}</span>
+                    <span className="inline-flex items-center gap-1"><CircleX size={11} />{list.discardedCount}</span>
                   </span>
                 </span>
               </button>

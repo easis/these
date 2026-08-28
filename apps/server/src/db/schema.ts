@@ -62,7 +62,7 @@ export const listItems = sqliteTable(
       .references(() => lists.id, { onDelete: "cascade" }),
     mediaPath: text("media_path").notNull(),
     mediaKind: text("media_kind", { enum: ["image", "video"] }).notNull(),
-    status: text("status", { enum: ["selected", "maybe"] }).notNull(),
+    status: text("status", { enum: ["selected", "maybe", "discarded"] }).notNull(),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -70,7 +70,7 @@ export const listItems = sqliteTable(
     uniqueIndex("list_items_list_media_unique").on(table.listId, table.mediaPath),
     index("list_items_list_status_idx").on(table.listId, table.status),
     check("list_items_kind_check", sql`${table.mediaKind} IN ('image', 'video')`),
-    check("list_items_status_check", sql`${table.status} IN ('selected', 'maybe')`),
+    check("list_items_status_check", sql`${table.status} IN ('selected', 'maybe', 'discarded')`),
   ],
 );
 

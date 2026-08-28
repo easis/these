@@ -29,8 +29,14 @@ export function FolderManagerPage() {
     return !deferredSearch || folder.path.toLocaleLowerCase().includes(deferredSearch) || folder.alias?.toLocaleLowerCase().includes(deferredSearch);
   }), [folders, filter, deferredSearch]);
   const update = async (id: number, patch: Partial<Pick<FolderMetadata, "path" | "alias" | "favorite" | "hidden">>) => {
-    try { await api(`/api/folder-metadata/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); await Promise.all([load(), refresh()]); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Could not update the folder."); }
+    try {
+      await api(`/api/folder-metadata/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+      await Promise.all([load(), refresh()]);
+      setError(null);
+      return null;
+    } catch (caught) {
+      return caught instanceof Error ? caught.message : "Could not update the folder.";
+    }
   };
   return (
     <div className={content.pageScroll}><div className={content.widePage}>
@@ -50,20 +56,52 @@ export function FolderManagerPage() {
   );
 }
 
-function FolderMetadataRow({ folder, onUpdate, onDelete }: { folder: FolderMetadata; onUpdate: (patch: Partial<Pick<FolderMetadata, "path" | "alias" | "favorite" | "hidden">>) => Promise<void>; onDelete: () => Promise<void> }) {
+function FolderMetadataRow({ folder, onUpdate, onDelete }: { folder: FolderMetadata; onUpdate: (patch: Partial<Pick<FolderMetadata, "path" | "alias" | "favorite" | "hidden">>) => Promise<string | null>; onDelete: () => Promise<void> }) {
   const [alias, setAlias] = useState(folder.alias ?? "");
   const [folderPath, setFolderPath] = useState(folder.path);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [rowError, setRowError] = useState<string | null>(null);
+  useEffect(() => {
+    setAlias(folder.alias ?? "");
+    setFolderPath(folder.path);
+  }, [folder.alias, folder.path]);
   const changed = alias !== (folder.alias ?? "") || folderPath !== folder.path;
+  const restore = () => {
+    setAlias(folder.alias ?? "");
+    setFolderPath(folder.path);
+    setSaveState("idle");
+    setRowError(null);
+  };
+  const commit = async (patch: Partial<Pick<FolderMetadata, "path" | "alias" | "favorite" | "hidden">> = { alias, path: folderPath }) => {
+    setSaveState("saving");
+    setRowError(null);
+    const error = await onUpdate(patch);
+    if (error) {
+      setRowError(error);
+      setSaveState("error");
+    } else {
+      setSaveState("saved");
+    }
+  };
+  const handleFieldKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && changed && saveState !== "saving") {
+      event.preventDefault();
+      void commit();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      restore();
+    }
+  };
   return (
     <div className={cx(styles.metadataRow, folder.status === "missing" && styles.missing)} role="row">
-      <div><input className={styles.inlineField} value={alias} placeholder="No alias" onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && changed) void onUpdate({ alias, path: folderPath }); if (event.key === "Escape") { setAlias(folder.alias ?? ""); setFolderPath(folder.path); } }} /></div>
-      <div><input className={cx(styles.inlineField, styles.path)} value={folderPath} onChange={(event) => setFolderPath(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && changed) void onUpdate({ alias, path: folderPath }); if (event.key === "Escape") setFolderPath(folder.path); }} /></div>
+      <label className={styles.rowField}><span>Folder alias</span><input className={styles.inlineField} value={alias} placeholder="No alias" aria-label={`Alias for ${folder.path}`} onChange={(event) => { setAlias(event.target.value); setSaveState("idle"); setRowError(null); }} onKeyDown={handleFieldKey} /></label>
+      <label className={styles.rowField}><span>Folder path</span><input className={cx(styles.inlineField, styles.path)} value={folderPath} aria-label={`Path for ${folder.alias || folder.path}`} aria-invalid={saveState === "error" || undefined} onChange={(event) => { setFolderPath(event.target.value); setSaveState("idle"); setRowError(null); }} onKeyDown={handleFieldKey} /></label>
       <div className={styles.metadataFlags}>
-        <button type="button" className={cx(folder.favorite && styles.on, folder.favorite && styles.favorite)} onClick={() => void onUpdate({ favorite: !folder.favorite })} title="Favorite"><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
-        <button type="button" className={folder.hidden ? styles.on : undefined} onClick={() => void onUpdate({ hidden: !folder.hidden })} title="Hidden"><EyeOff size={14} /></button>
+        <button type="button" className={cx(folder.favorite && styles.on, folder.favorite && styles.favorite)} aria-pressed={folder.favorite} onClick={() => void commit({ favorite: !folder.favorite })} title="Favorite" aria-label={folder.favorite ? "Remove favorite" : "Mark favorite"}><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
+        <button type="button" className={folder.hidden ? styles.on : undefined} aria-pressed={folder.hidden} onClick={() => void commit({ hidden: !folder.hidden })} title="Hidden" aria-label={folder.hidden ? "Unhide folder" : "Hide folder"}><EyeOff size={14} /></button>
       </div>
       <span className={cx(styles.metadataStatus, folder.status === "ok" ? styles.ok : styles.missingStatus)}>{folder.status === "ok" ? <Check size={12} /> : <X size={12} />}{folder.status}</span>
-      <div className={styles.metadataActions}>{changed ? <button className={cx(ui.compactButton, ui.primary)} type="button" onClick={() => void onUpdate({ alias, path: folderPath })}>Save</button> : null}<button className={cx(ui.iconButton, ui.dangerHover)} type="button" onClick={() => window.confirm("Remove this metadata record? The folder and files will not be changed.") && void onDelete()} aria-label="Remove metadata"><Trash2 size={14} /></button></div>
+      <div className={styles.metadataActions}>{changed ? <><button className={cx(ui.compactButton, ui.primary)} type="button" disabled={saveState === "saving"} onClick={() => void commit()}>{saveState === "saving" ? "Saving…" : "Save"}</button><button className={ui.compactButton} type="button" disabled={saveState === "saving"} onClick={restore}>Cancel</button></> : null}<button className={cx(ui.iconButton, ui.dangerHover)} type="button" onClick={() => window.confirm("Remove this metadata record? The folder and files will not be changed.") && void onDelete()} title="Remove metadata" aria-label={`Remove metadata for ${folder.alias || folder.path}`}><Trash2 size={14} /></button><span className={cx(styles.saveFeedback, saveState === "error" && styles.saveError)} role={saveState === "error" ? "alert" : "status"} aria-live="polite">{saveState === "saved" ? "Saved" : rowError}</span></div>
     </div>
   );
 }

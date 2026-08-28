@@ -31,6 +31,8 @@
   --accent-contrast: #ffffff;
   --maybe: #98723c;
   --maybe-soft: #f2e8d8;
+  --discarded: #8c5b63;
+  --discarded-soft: #f1e6e8;
   --danger: #a5423c;
   --danger-soft: #f6e5e3;
   --viewer: #08080a;
@@ -60,6 +62,8 @@
   --accent-contrast: #11111a;
   --maybe: #d1a664;
   --maybe-soft: #443720;
+  --discarded: #d08e9a;
+  --discarded-soft: #3e2a2f;
   --danger: #e17f77;
   --danger-soft: #462a28;
   --viewer: #050507;

@@ -10,13 +10,23 @@
 .viewerNav:hover { color: white; background: rgb(255 255 255 / 4%); }
 .left { grid-column: 1; }
 .right { grid-column: 3; }
-.viewerMedia { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 10px; }
-.viewerMedia img, .viewerMedia video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.viewerMedia { position: relative; grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 10px; overflow: hidden; }
+.viewerMedia video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.zoomViewport { position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
+.zoomViewport > img { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; object-fit: contain; user-select: none; will-change: width, height, transform; }
+.zoomPannable { cursor: grab; }
+.zoomPannable:active { cursor: grabbing; }
+.zoomControls { position: absolute; z-index: 2; left: 50%; bottom: 12px; display: flex; align-items: center; padding: 3px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 7px; background: rgb(11 13 17 / 78%); box-shadow: 0 5px 18px rgb(0 0 0 / 30%); backdrop-filter: blur(8px); transform: translateX(-50%); }
+.zoomControls button { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 8px; border: 0; border-radius: 4px; color: rgb(255 255 255 / 78%); background: transparent; font-size: var(--font-ui-xs); cursor: pointer; }
+.zoomControls button:hover { color: white; background: rgb(255 255 255 / 10%); }
+.zoomControls button:disabled { opacity: .34; cursor: not-allowed; }
+.zoomControls .zoomReadout { min-width: 66px; }
 .viewerClassify { grid-column: 1 / -1; grid-row: 3; display: flex; align-items: center; justify-content: center; gap: 7px; border-top: 1px solid rgb(255 255 255 / 10%); }
 .viewerClassify button { height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 5px; color: rgb(255 255 255 / 72%); background: rgb(255 255 255 / 5%); font-size: var(--font-ui-md); cursor: pointer; }
 .viewerClassify button:hover { color: white; background: rgb(255 255 255 / 10%); }
 .viewerClassify button.selected { border-color: var(--accent); color: #eef2ff; background: color-mix(in srgb, var(--accent) 55%, transparent); }
 .viewerClassify button.maybe { border-color: var(--maybe); color: #fff4df; background: color-mix(in srgb, var(--maybe) 45%, transparent); }
+.viewerClassify button.discarded { border-color: var(--discarded); color: #ffeef1; background: color-mix(in srgb, var(--discarded) 45%, transparent); }
 .viewerClassify kbd { min-width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / 18%); border-radius: 3px; font-size: var(--font-ui-2xs); }
 .viewerDetails { grid-column: 4; grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid rgb(255 255 255 / 10%); background: rgb(12 14 18 / 84%); }
 .detailsHeading { height: 53px; flex: none; display: flex; align-items: center; padding: 0 18px; border-bottom: 1px solid rgb(255 255 255 / 8%); }
@@ -52,6 +62,12 @@
   .detailsSignature, .detailsSection { padding-inline: 14px; }
   .viewerBar { gap: 7px; padding-left: 10px; }
   .contextChip { display: none; }
-  .viewerClassify button { padding: 0 8px; font-size: 0; }
-  .viewerClassify button kbd, .viewerClassify button svg { font-size: initial; }
+  .viewerButton, .viewerNav { min-width: 44px; min-height: 44px; }
+  .viewerClassify { gap: 5px; padding-inline: 5px; }
+  .viewerClassify button { min-width: 0; height: 44px; flex: 1; justify-content: center; gap: 4px; padding: 0 6px; font-size: var(--font-ui-xs); }
+  .viewerClassify kbd { display: none; }
+  .zoomControls { bottom: 8px; }
+  .zoomControls button { min-width: 44px; height: 44px; }
+  .zoomControls .zoomReadout { min-width: 58px; }
+  .zoomControls button:nth-child(3) span { display: none; }
 }

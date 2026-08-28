@@ -64,9 +64,9 @@
   .favoriteItem { min-height: 44px; height: auto; }
   .favoriteRow { min-height: 44px; display: flex; align-items: center; padding-inline: 10px; }
   .treeRow { min-height: 44px; height: auto; }
-  .treeToggle { width: 40px; height: 44px; }
+  .treeToggle { width: 44px; height: 44px; }
   .treeLabel { min-height: 44px; height: auto; }
-  .treeMenuTrigger { width: 40px; height: 44px; opacity: 1; visibility: visible; }
+  .treeMenuTrigger { width: 44px; height: 44px; opacity: 1; visibility: visible; }
   .treeMenu { width: min(210px, calc(100vw - 28px)); }
 }
 

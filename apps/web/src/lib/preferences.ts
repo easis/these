@@ -3,6 +3,7 @@ import type { ThemePreference } from "@these/shared";
 export interface LocalPreferences {
   theme: ThemePreference;
   thumbnailSize: number;
+  mobileGalleryDensity: "compact" | "comfortable";
   leftSidebarOpen: boolean;
   leftSidebarWidth: number;
   rightSidebarOpen: boolean;
@@ -44,6 +45,7 @@ export interface SidebarWidthConfig {
 export const defaultPreferences: LocalPreferences = {
   theme: "system",
   thumbnailSize: 180,
+  mobileGalleryDensity: "compact",
   leftSidebarOpen: true,
   leftSidebarWidth: folderSidebarWidth.default,
   rightSidebarOpen: true,
@@ -62,6 +64,7 @@ export function readPreferences(): LocalPreferences {
       ...stored,
       leftSidebarWidth: clampSidebarWidth(stored.leftSidebarWidth, folderSidebarWidth),
       rightSidebarWidth: clampSidebarWidth(stored.rightSidebarWidth, listSidebarWidth),
+      mobileGalleryDensity: stored.mobileGalleryDensity === "comfortable" ? "comfortable" : "compact",
       activeCollectionId: positiveIntegerOrNull(stored.activeCollectionId),
       collectionLastFolders: collectionFolderMap(stored.collectionLastFolders),
     };

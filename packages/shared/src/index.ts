@@ -1,5 +1,5 @@
 export type MediaKind = "image" | "video";
-export type ListItemStatus = "selected" | "maybe";
+export type ListItemStatus = "selected" | "maybe" | "discarded";
 export type ThemePreference = "system" | "light" | "dark";
 
 export interface MediaRoot {
@@ -149,6 +149,7 @@ export interface TheseList {
   name: string;
   selectedCount: number;
   maybeCount: number;
+  discardedCount: number;
   createdAt: string;
   updatedAt: string;
 }

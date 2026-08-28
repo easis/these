@@ -43,6 +43,20 @@ describe("Viewer technical details", () => {
     expect(screen.getByRole("button", { name: "Remove selected status" })).toBeInTheDocument();
   });
 
+  it("offers Discarded with shortcut 3 and image-only zoom controls", () => {
+    render(<ClassificationHarness />);
+    expect(screen.getByRole("button", { name: "Mark discarded" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Image zoom controls" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "3" });
+    expect(screen.getByRole("button", { name: "Remove discarded status" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps native video controls without image zoom controls", () => {
+    render(<Viewer items={[{ ...mediaEntry("clip.mp4"), kind: "video" }]} index={0} classificationContext={null} classificationEnabled onIndex={() => undefined} onClose={() => undefined} onStatus={() => undefined} />);
+    expect(screen.getByRole("dialog", { name: "clip.mp4" }).querySelector("video")).toHaveAttribute("controls");
+    expect(screen.queryByRole("group", { name: "Image zoom controls" })).not.toBeInTheDocument();
+  });
+
   it("loads details only after opening the panel and renders the curated metadata", async () => {
     mocks.api.mockResolvedValue(imageMetadata("first.jpg", { location: { latitude: 40.416775, longitude: -3.70379, altitudeMeters: 667 } }));
     render(<ViewerHarness />);

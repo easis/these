@@ -1,10 +1,11 @@
-import { Check, ChevronLeft, ChevronRight, CircleHelp, Download, Info, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CircleHelp, CircleX, Download, Info, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ListItemStatus, MediaEntry, MediaMetadataResponse } from "@these/shared";
 import { api, isAbortError, query } from "../lib/api";
 import { cx } from "../lib/cx";
 import { startMediaDownload } from "../lib/downloads";
 import { MediaDetailsPanel } from "./MediaDetailsPanel";
+import { ImageZoom } from "./ImageZoom";
 import styles from "./Viewer.module.css";
 
 interface ViewerProps {
@@ -41,8 +42,9 @@ export function Viewer({ items, index, classificationContext, classificationEnab
           else onIndex(index + 1);
         }
       }
-      else if (event.key === "1" && classificationEnabled && !classificationPending) onStatus("selected");
-      else if (event.key === "2" && classificationEnabled && !classificationPending) onStatus("maybe");
+      else if (event.key === "1" && classificationEnabled && !classificationPending) onStatus(media?.status === "selected" ? null : "selected");
+      else if (event.key === "2" && classificationEnabled && !classificationPending) onStatus(media?.status === "maybe" ? null : "maybe");
+      else if (event.key === "3" && classificationEnabled && !classificationPending) onStatus(media?.status === "discarded" ? null : "discarded");
       else if (event.key === "0" && classificationEnabled && !classificationPending) onStatus(null);
       else if (event.key.toLowerCase() === "i" && !event.altKey && !event.ctrlKey && !event.metaKey) setDetailsOpen((current) => !current);
       else return;
@@ -50,7 +52,7 @@ export function Viewer({ items, index, classificationContext, classificationEnab
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [classificationEnabled, classificationPending, index, nextAvailable, nextPending, onClose, onIndex, onNext, onStatus]);
+  }, [classificationEnabled, classificationPending, index, media?.status, nextAvailable, nextPending, onClose, onIndex, onNext, onStatus]);
 
   useEffect(() => {
     if (!detailsOpen || !media) return;
@@ -99,7 +101,7 @@ export function Viewer({ items, index, classificationContext, classificationEnab
       </div>
       <button type="button" className={cx(styles.viewerNav, styles.left)} disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label="Previous"><ChevronLeft size={28} /></button>
       <div className={styles.viewerMedia}>
-        {media.kind === "image" ? <img src={`/api/media?${query({ path: media.path })}`} alt={media.name} /> : (
+        {media.kind === "image" ? <ImageZoom path={media.path} name={media.name} src={`/api/media?${query({ path: media.path })}`} layoutKey={detailsOpen} /> : (
           <video key={media.path} src={`/api/media?${query({ path: media.path })}`} controls autoPlay playsInline />
         )}
       </div>
@@ -113,6 +115,7 @@ export function Viewer({ items, index, classificationContext, classificationEnab
       <div className={styles.viewerClassify}>
         <button disabled={!classificationEnabled || classificationPending} className={media.status === "selected" ? styles.selected : undefined} type="button" aria-pressed={media.status === "selected"} aria-label={media.status === "selected" ? "Remove selected status" : "Mark selected"} onClick={() => onStatus(media.status === "selected" ? null : "selected")}><kbd>1</kbd><Check size={15} /> Selected</button>
         <button disabled={!classificationEnabled || classificationPending} className={media.status === "maybe" ? styles.maybe : undefined} type="button" aria-pressed={media.status === "maybe"} aria-label={media.status === "maybe" ? "Remove maybe status" : "Mark maybe"} onClick={() => onStatus(media.status === "maybe" ? null : "maybe")}><kbd>2</kbd><CircleHelp size={15} /> Maybe</button>
+        <button disabled={!classificationEnabled || classificationPending} className={media.status === "discarded" ? styles.discarded : undefined} type="button" aria-pressed={media.status === "discarded"} aria-label={media.status === "discarded" ? "Remove discarded status" : "Mark discarded"} onClick={() => onStatus(media.status === "discarded" ? null : "discarded")}><kbd>3</kbd><CircleX size={15} /> Discarded</button>
       </div>
     </div>
   );
