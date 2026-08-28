@@ -48,7 +48,7 @@
 .folderMenu button svg { color: var(--text-muted); }
 .folderMenu button:first-child svg { color: var(--maybe); }
 .virtualGalleryScroll { position: relative; width: 100%; }
-.loadMore { position: absolute; left: 50%; height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--surface); font-size: var(--font-ui-sm); cursor: pointer; transform: translateX(-50%); }
+.loadMoreSentinel { position: absolute; left: 0; width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: var(--font-ui-sm); }
 .emptyGallery { height: 180px; display: grid; place-items: center; color: var(--text-muted); font-size: var(--font-ui-md); }
 .collectionEmptyGallery { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 28px; color: var(--text-muted); text-align: center; }
 .collectionEmptyGallery > svg { color: var(--accent); opacity: .78; }
