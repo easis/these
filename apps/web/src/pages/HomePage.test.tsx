@@ -14,12 +14,11 @@ vi.mock("../state/app-context", () => ({
 
 describe("HomePage", () => {
   it("keeps the landing page focused on status and useful actions", () => {
-    const { container } = render(<MemoryRouter><HomePage /></MemoryRouter>);
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
 
     expect(screen.getByRole("heading", { name: "Browse your folders. Keep the files where they are." })).toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "1 root ready")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Browse media/ })).toHaveAttribute("href", "/browse?path=%2Fmedia%2Fphotos");
     expect(screen.queryByText(/presents the image and video folders/i)).not.toBeInTheDocument();
-    expect(container.querySelector(".home-mark")).not.toBeInTheDocument();
   });
 });

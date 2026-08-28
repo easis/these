@@ -44,8 +44,8 @@ describe("AppShell theme switcher", () => {
     const mobileNavigation = screen.getByRole("navigation", { name: "Mobile navigation" });
     expect(within(desktopNavigation).getAllByRole("link")).toHaveLength(4);
     expect(within(mobileNavigation).getAllByRole("link")).toHaveLength(4);
-    expect(within(mobileNavigation).getByRole("link", { name: "Lists" })).toHaveClass("is-active");
-    expect(within(mobileNavigation).getByRole("link", { name: "Browse" })).not.toHaveClass("is-active");
+    expect(within(mobileNavigation).getByRole("link", { name: "Lists" })).toHaveAttribute("aria-current", "page");
+    expect(within(mobileNavigation).getByRole("link", { name: "Browse" })).not.toHaveAttribute("aria-current");
   });
 
   it("shows a retryable server-unavailable state instead of route content", () => {

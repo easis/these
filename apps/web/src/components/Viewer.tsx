@@ -2,7 +2,9 @@ import { Check, ChevronLeft, ChevronRight, CircleHelp, Info, X } from "lucide-re
 import { useEffect, useRef, useState } from "react";
 import type { ListItemStatus, MediaEntry, MediaMetadataResponse } from "@these/shared";
 import { api, isAbortError, query } from "../lib/api";
+import { cx } from "../lib/cx";
 import { MediaDetailsPanel } from "./MediaDetailsPanel";
+import styles from "./Viewer.module.css";
 
 interface ViewerProps {
   items: MediaEntry[];
@@ -86,29 +88,29 @@ export function Viewer({ items, index, classificationContext, classificationEnab
   if (!media) return null;
   const metadataMatchesMedia = metadataPath === media.path;
   return (
-    <div className={`viewer${detailsOpen ? " has-details" : ""}`} role="dialog" aria-modal="true" aria-label={media.name} aria-busy={classificationPending || nextPending}>
-      <div className="viewer-bar">
-        <span className="viewer-title truncate font-mono text-xs text-white/70">{media.name}</span>
-        {classificationContext ? <span className="viewer-context-chip" title={classificationContext}>{classificationContext}</span> : null}
-        <button type="button" className={`viewer-button${detailsOpen ? " is-active" : ""}`} onClick={() => setDetailsOpen((current) => !current)} aria-label={detailsOpen ? "Hide details" : "Show details"} aria-expanded={detailsOpen} aria-controls="viewer-details" title="Details (I)"><Info size={18} /></button>
-        <button type="button" className="viewer-button" onClick={onClose} aria-label="Close viewer"><X size={18} /></button>
+    <div className={cx(styles.viewer, detailsOpen && styles.hasDetails)} role="dialog" aria-modal="true" aria-label={media.name} aria-busy={classificationPending || nextPending}>
+      <div className={styles.viewerBar}>
+        <span className={cx(styles.viewerTitle, "truncate font-mono text-xs text-white/70")}>{media.name}</span>
+        {classificationContext ? <span className={styles.contextChip} title={classificationContext}>{classificationContext}</span> : null}
+        <button type="button" className={cx(styles.viewerButton, detailsOpen && styles.buttonActive)} onClick={() => setDetailsOpen((current) => !current)} aria-label={detailsOpen ? "Hide details" : "Show details"} aria-expanded={detailsOpen} aria-controls="viewer-details" title="Details (I)"><Info size={18} /></button>
+        <button type="button" className={styles.viewerButton} onClick={onClose} aria-label="Close viewer"><X size={18} /></button>
       </div>
-      <button type="button" className="viewer-nav left" disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label="Previous"><ChevronLeft size={28} /></button>
-      <div className="viewer-media">
+      <button type="button" className={cx(styles.viewerNav, styles.left)} disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label="Previous"><ChevronLeft size={28} /></button>
+      <div className={styles.viewerMedia}>
         {media.kind === "image" ? <img src={`/api/media?${query({ path: media.path })}`} alt={media.name} /> : (
           <video key={media.path} src={`/api/media?${query({ path: media.path })}`} controls autoPlay playsInline />
         )}
       </div>
-      <button type="button" className="viewer-nav right" disabled={!nextAvailable || nextPending} onClick={() => onNext ? onNext() : onIndex(index + 1)} aria-label="Next"><ChevronRight size={28} /></button>
+      <button type="button" className={cx(styles.viewerNav, styles.right)} disabled={!nextAvailable || nextPending} onClick={() => onNext ? onNext() : onIndex(index + 1)} aria-label="Next"><ChevronRight size={28} /></button>
       {detailsOpen ? <MediaDetailsPanel
         loading={metadataMatchesMedia ? metadataLoading : true}
         error={metadataMatchesMedia ? metadataError : null}
         metadata={metadataMatchesMedia ? metadata : null}
         onRetry={() => setRetryVersion((value) => value + 1)}
       /> : null}
-      <div className="viewer-classify">
-        <button disabled={!classificationEnabled || classificationPending} className={media.status === "selected" ? "is-selected" : ""} type="button" onClick={() => onStatus("selected")}><kbd>1</kbd><Check size={15} /> Selected</button>
-        <button disabled={!classificationEnabled || classificationPending} className={media.status === "maybe" ? "is-maybe" : ""} type="button" onClick={() => onStatus("maybe")}><kbd>2</kbd><CircleHelp size={15} /> Maybe</button>
+      <div className={styles.viewerClassify}>
+        <button disabled={!classificationEnabled || classificationPending} className={media.status === "selected" ? styles.selected : undefined} type="button" onClick={() => onStatus("selected")}><kbd>1</kbd><Check size={15} /> Selected</button>
+        <button disabled={!classificationEnabled || classificationPending} className={media.status === "maybe" ? styles.maybe : undefined} type="button" onClick={() => onStatus("maybe")}><kbd>2</kbd><CircleHelp size={15} /> Maybe</button>
         <button disabled={!classificationEnabled || classificationPending || !media.status} type="button" onClick={() => onStatus(null)}><kbd>0</kbd><X size={15} /> Remove</button>
       </div>
     </div>

@@ -1,0 +1,10 @@
+.listIndex { margin-top: 13px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: var(--surface); }
+.listIndexRow { min-height: 62px; display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.listIndexRow:last-child { border-bottom: 0; }
+.listIndexRow:hover { background: var(--surface-secondary); }
+.listIndexRow.active { box-shadow: inset 3px 0 var(--accent); }
+.listIndexRow > a { color: var(--text-primary); text-decoration: none; }
+.listIndexRow strong { display: block; font-size: var(--font-ui-lg); }
+.listCounts { display: flex; gap: 11px; margin-top: 4px; color: var(--text-muted); font-size: var(--font-ui-xs); }
+.listCounts span { display: inline-flex; align-items: center; gap: 4px; }
+.emptyMark { width: 54px; height: 36px; display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }

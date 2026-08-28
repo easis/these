@@ -1,3 +1,3 @@
 export function AppName() {
-  return <span className="app-name">these</span>;
+  return <span className="italic">these</span>;
 }

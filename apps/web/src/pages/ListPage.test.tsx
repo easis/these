@@ -51,7 +51,7 @@ describe("ListPage viewer", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open reviewed.jpg" }));
 
     const viewer = screen.getByRole("dialog", { name: "reviewed.jpg" });
-    expect(within(viewer).getByText("Reviewed delivery", { selector: ".viewer-context-chip" })).toBeInTheDocument();
+    expect(within(viewer).getByText("Reviewed delivery")).toBeInTheDocument();
     expect(within(viewer).queryByText(/Different active list/)).not.toBeInTheDocument();
     fireEvent.click(within(viewer).getByRole("button", { name: /Maybe/ }));
 
@@ -95,7 +95,7 @@ describe("ListPage viewer", () => {
     );
     await screen.findByText("No selected media.");
 
-    expect(screen.getByText("Active", { selector: ".active-badge" })).toBeInTheDocument();
+    expect(screen.getByText("Active", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText("Active list")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Download options" })).toBeDisabled();

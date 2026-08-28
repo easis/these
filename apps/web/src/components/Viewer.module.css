@@ -1,0 +1,57 @@
+.viewer { position: fixed; z-index: 50; inset: 0; display: grid; grid-template-columns: 62px 1fr 62px; grid-template-rows: 46px 1fr 58px; color: white; background: var(--viewer); }
+.hasDetails { grid-template-columns: 62px minmax(0, 1fr) 62px clamp(290px, 25vw, 360px); }
+.viewerBar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 16px; border-bottom: 1px solid rgb(255 255 255 / 10%); }
+.viewerTitle { min-width: 0; flex: 1; }
+.contextChip { max-width: min(280px, 40vw); height: 24px; flex: none; display: inline-flex; align-items: center; padding: 0 8px; overflow: hidden; border: 1px solid rgb(255 255 255 / 12%); border-radius: 999px; color: rgb(255 255 255 / 78%); background: rgb(255 255 255 / 8%); font-size: var(--font-ui-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.viewerButton { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 5px; color: rgb(255 255 255 / 70%); background: transparent; cursor: pointer; }
+.viewerButton:hover { color: white; background: rgb(255 255 255 / 8%); }
+.viewerButton.buttonActive { color: white; background: rgb(255 255 255 / 11%); }
+.viewerNav { grid-row: 2; display: grid; place-items: center; border: 0; color: rgb(255 255 255 / 56%); background: transparent; cursor: pointer; }
+.viewerNav:hover { color: white; background: rgb(255 255 255 / 4%); }
+.left { grid-column: 1; }
+.right { grid-column: 3; }
+.viewerMedia { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 10px; }
+.viewerMedia img, .viewerMedia video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.viewerClassify { grid-column: 1 / -1; grid-row: 3; display: flex; align-items: center; justify-content: center; gap: 7px; border-top: 1px solid rgb(255 255 255 / 10%); }
+.viewerClassify button { height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 5px; color: rgb(255 255 255 / 72%); background: rgb(255 255 255 / 5%); font-size: var(--font-ui-md); cursor: pointer; }
+.viewerClassify button:hover { color: white; background: rgb(255 255 255 / 10%); }
+.viewerClassify button.selected { border-color: var(--accent); color: #eef2ff; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.viewerClassify button.maybe { border-color: var(--maybe); color: #fff4df; background: color-mix(in srgb, var(--maybe) 45%, transparent); }
+.viewerClassify kbd { min-width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / 18%); border-radius: 3px; font-size: var(--font-ui-2xs); }
+.viewerDetails { grid-column: 4; grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid rgb(255 255 255 / 10%); background: rgb(12 14 18 / 84%); }
+.detailsHeading { height: 53px; flex: none; display: flex; align-items: center; padding: 0 18px; border-bottom: 1px solid rgb(255 255 255 / 8%); }
+.detailsHeading span { display: block; color: rgb(255 255 255 / 92%); font-size: var(--font-ui-md); font-weight: 680; letter-spacing: .02em; }
+.detailsHeading small { display: block; margin-top: 2px; color: rgb(255 255 255 / 42%); font-family: ui-monospace, monospace; font-size: var(--font-ui-2xs); letter-spacing: .06em; text-transform: uppercase; }
+.detailsScroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.detailsSignature { min-height: 42px; display: flex; align-items: center; margin: 0; padding: 10px 18px; border-bottom: 1px solid rgb(255 255 255 / 8%); color: rgb(255 255 255 / 78%); font-family: ui-monospace, monospace; font-size: var(--font-ui-xs); font-weight: 650; letter-spacing: .035em; line-height: 1.45; }
+.detailsSection { padding: 14px 18px 13px; border-bottom: 1px solid rgb(255 255 255 / 8%); }
+.detailsSection h2 { margin: 0 0 10px; color: rgb(255 255 255 / 38%); font-size: var(--font-ui-2xs); font-weight: 720; letter-spacing: .1em; text-transform: uppercase; }
+.detailsSection dl { display: grid; gap: 8px; margin: 0; }
+.detailsSection dl > div { display: grid; grid-template-columns: minmax(76px, .72fr) minmax(0, 1.28fr); gap: 12px; align-items: baseline; }
+.detailsSection dt { color: rgb(255 255 255 / 45%); font-size: var(--font-ui-xs); }
+.detailsSection dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: rgb(255 255 255 / 78%); font-family: ui-monospace, monospace; font-size: var(--font-ui-xs); line-height: 1.45; }
+.detailsSection a { color: #b9c6ff; text-decoration: none; }
+.detailsSection a:hover { color: white; text-decoration: underline; text-underline-offset: 3px; }
+.detailsPath { color: rgb(255 255 255 / 62%); }
+.detailsMessage { display: flex; align-items: center; gap: 9px; padding: 22px 18px; color: rgb(255 255 255 / 52%); font-size: var(--font-ui-sm); }
+.detailsPulse { width: 7px; height: 7px; flex: none; border-radius: 50%; background: rgb(185 198 255 / 80%); animation: detailsPulse 1.2s ease-in-out infinite; }
+.detailsError { margin: 16px; padding: 13px; border: 1px solid rgb(248 113 113 / 25%); border-radius: 5px; color: rgb(255 255 255 / 65%); background: rgb(127 29 29 / 16%); font-size: var(--font-ui-sm); line-height: 1.45; }
+.detailsError strong { color: rgb(255 255 255 / 86%); }
+.detailsError p { margin: 5px 0 10px; }
+.detailsError button { height: 27px; padding: 0 9px; border: 1px solid rgb(255 255 255 / 16%); border-radius: 4px; color: white; background: rgb(255 255 255 / 7%); font-size: var(--font-ui-xs); cursor: pointer; }
+.detailsWarning { margin: 12px 18px 0; padding: 8px 9px; border-left: 2px solid rgb(251 191 36 / 60%); color: rgb(255 255 255 / 58%); background: rgb(251 191 36 / 6%); font-size: var(--font-ui-xs); line-height: 1.45; }
+
+@keyframes detailsPulse { 50% { opacity: .28; transform: scale(.82); } }
+
+@media (max-width: 720px) or ((max-width: 900px) and (max-height: 500px)) {
+  .viewer { grid-template-columns: 42px 1fr 42px; }
+  .hasDetails { grid-template-columns: 42px minmax(0, 1fr) 42px; grid-template-rows: 46px minmax(0, 1fr) minmax(190px, 42dvh) 58px; }
+  .hasDetails .viewerDetails { grid-column: 1 / -1; grid-row: 3; border-top: 1px solid rgb(255 255 255 / 10%); border-left: 0; }
+  .hasDetails .viewerClassify { grid-row: 4; }
+  .detailsHeading { height: 43px; padding-inline: 14px; }
+  .detailsSignature, .detailsSection { padding-inline: 14px; }
+  .viewerBar { gap: 7px; padding-left: 10px; }
+  .contextChip { display: none; }
+  .viewerClassify button { padding: 0 8px; font-size: 0; }
+  .viewerClassify button kbd, .viewerClassify button svg { font-size: initial; }
+}

@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { cx } from "../lib/cx";
+import ui from "../styles/ui.module.css";
+import styles from "./TextInputDialog.module.css";
 
 interface TextInputDialogProps {
   title: string;
@@ -87,7 +90,7 @@ export function TextInputDialog({
   return createPortal(
     <dialog
       ref={dialogRef}
-      className="text-input-dialog"
+      className={styles.dialog}
       aria-labelledby={titleId}
       aria-describedby={describedBy}
       aria-busy={submitting}
@@ -95,12 +98,12 @@ export function TextInputDialog({
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}
       onClick={(event: MouseEvent<HTMLDialogElement>) => { if (event.target === event.currentTarget) close(); }}
     >
-      <form className="text-input-dialog-form" onSubmit={(event) => void submit(event)}>
-        <div className="text-input-dialog-heading">
+      <form className={styles.form} onSubmit={(event) => void submit(event)}>
+        <div className={styles.heading}>
           <h2 id={titleId}>{title}</h2>
           {description ? <p id={descriptionId}>{description}</p> : null}
         </div>
-        <label className="text-input-dialog-field">
+        <label className={styles.field}>
           <span>{label}</span>
           <input
             ref={inputRef}
@@ -116,10 +119,10 @@ export function TextInputDialog({
             }}
           />
         </label>
-        {error || submitError ? <div id={errorId} className="text-input-dialog-error" role="alert">{error || submitError}</div> : null}
-        <div className="text-input-dialog-actions">
-          <button className="compact-button" type="button" disabled={submitting} onClick={close}>Cancel</button>
-          <button className="compact-button primary" type="submit" disabled={submitting || !valid}>{submitting ? pendingLabel : submitLabel}</button>
+        {error || submitError ? <div id={errorId} className={styles.error} role="alert">{error || submitError}</div> : null}
+        <div className={styles.actions}>
+          <button className={cx(ui.compactButton, styles.actionButton)} type="button" disabled={submitting} onClick={close}>Cancel</button>
+          <button className={cx(ui.compactButton, ui.primary, styles.actionButton)} type="submit" disabled={submitting || !valid}>{submitting ? pendingLabel : submitLabel}</button>
         </div>
       </form>
     </dialog>,

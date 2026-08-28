@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import type { BrowseResponse } from "@these/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderTree } from "./FolderTree";
+import styles from "./FolderTree.module.css";
 
 const mocks = vi.hoisted(() => ({
   api: vi.fn(),
@@ -67,8 +68,8 @@ describe("FolderTree", () => {
 
     render(<FolderTree currentPath="/media/current" />, { wrapper: MemoryRouter });
 
-    expect((await screen.findByText("Hidden child")).closest(".tree-row")).toHaveClass("is-hidden");
-    expect(screen.getByRole("button", { name: "Hidden favorite" })).toHaveClass("is-hidden");
+    expect((await screen.findByText("Hidden child")).closest(`.${styles.treeRow}`)).toHaveClass(styles.hidden!);
+    expect(screen.getByRole("button", { name: "Hidden favorite" })).toHaveClass(styles.hidden!);
   });
 
   it("applies hidden overrides immediately to cached tree nodes", async () => {
@@ -81,10 +82,10 @@ describe("FolderTree", () => {
 
     mocks.showHidden = true;
     rerender(<FolderTree currentPath="/media/current" hiddenOverrides={new Map([["/media/photos", true]])} />);
-    expect(screen.getByTitle("/media/photos").closest(".tree-row")).toHaveClass("is-hidden");
+    expect(screen.getByTitle("/media/photos").closest(`.${styles.treeRow}`)).toHaveClass(styles.hidden!);
 
     rerender(<FolderTree currentPath="/media/current" hiddenOverrides={new Map([["/media/photos", false]])} />);
-    expect(screen.getByTitle("/media/photos").closest(".tree-row")).not.toHaveClass("is-hidden");
+    expect(screen.getByTitle("/media/photos").closest(`.${styles.treeRow}`)).not.toHaveClass(styles.hidden!);
   });
 
   it("applies an ancestral hidden override to descendant favorites", () => {
@@ -97,7 +98,7 @@ describe("FolderTree", () => {
 
     mocks.showHidden = true;
     rerender(<FolderTree currentPath="/media" hiddenOverrides={overrides} />);
-    expect(screen.getByRole("button", { name: "Trip" })).toHaveClass("is-hidden");
+    expect(screen.getByRole("button", { name: "Trip" })).toHaveClass(styles.hidden!);
   });
 
   it("notifies the parent after navigating to a folder", () => {

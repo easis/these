@@ -2,7 +2,11 @@ import { Check, EyeOff, FolderCog, Search, Star, Trash2, TriangleAlert, X } from
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { FolderMetadata } from "@these/shared";
 import { api } from "../lib/api";
+import { cx } from "../lib/cx";
 import { useApp } from "../state/app-context";
+import content from "../styles/content.module.css";
+import ui from "../styles/ui.module.css";
+import styles from "./FolderManagerPage.module.css";
 
 type FolderFilter = "all" | "favorite" | "hidden" | "missing";
 
@@ -29,19 +33,19 @@ export function FolderManagerPage() {
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not update the folder."); }
   };
   return (
-    <div className="page-scroll"><div className="wide-page">
-      <div className="page-title-row"><div><p className="eyebrow">Filesystem references</p><h1>Folder metadata</h1><p>Aliases, favorites, hidden subtrees and paths that need repair.</p></div></div>
-      <div className="manager-toolbar">
-        <label className="search-control"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search alias or path" aria-label="Search folders" /></label>
-        <div className="filter-tabs" role="group" aria-label="Folder filters">{(["all", "favorite", "hidden", "missing"] as const).map((value) => <button type="button" className={filter === value ? "is-active" : ""} onClick={() => setFilter(value)} key={value}>{value}</button>)}</div>
+    <div className={content.pageScroll}><div className={content.widePage}>
+      <div className={content.pageTitleRow}><div><p className={content.eyebrow}>Filesystem references</p><h1>Folder metadata</h1><p>Aliases, favorites, hidden subtrees and paths that need repair.</p></div></div>
+      <div className={styles.managerToolbar}>
+        <label className={cx(ui.searchControl, styles.managerSearch)}><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search alias or path" aria-label="Search folders" /></label>
+        <div className={styles.filterTabs} role="group" aria-label="Folder filters">{(["all", "favorite", "hidden", "missing"] as const).map((value) => <button type="button" className={filter === value ? styles.active : undefined} onClick={() => setFilter(value)} key={value}>{value}</button>)}</div>
       </div>
-      {error ? <div className="inline-error">{error}</div> : null}
-      <div className="metadata-table" role="table" aria-label="Folder metadata">
-        <div className="metadata-head" role="row"><span>Folder / alias</span><span>Path</span><span>Flags</span><span>Status</span><span /></div>
+      {error ? <div className={ui.inlineError}>{error}</div> : null}
+      <div className={styles.metadataTable} role="table" aria-label="Folder metadata">
+        <div className={styles.metadataHead} role="row"><span>Folder / alias</span><span>Path</span><span>Flags</span><span>Status</span><span /></div>
         {visible.map((folder) => <FolderMetadataRow key={folder.id} folder={folder} onUpdate={(patch) => update(folder.id, patch)} onDelete={async () => { await api(`/api/folder-metadata/${folder.id}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); }} />)}
       </div>
-      {!visible.length ? <div className="empty-state compact"><FolderCog size={22} /><h2>No folder metadata here</h2><p>Add an alias, favorite or hidden state while browsing. It will appear in this manager.</p></div> : null}
-      <p className="manager-note"><TriangleAlert size={14} />Hidden folders hide their entire subtree during normal navigation. Missing records are never deleted automatically; edit the path to a currently mounted directory to repair them.</p>
+      {!visible.length ? <div className={cx(content.emptyState, content.compact)}><FolderCog size={22} /><h2>No folder metadata here</h2><p>Add an alias, favorite or hidden state while browsing. It will appear in this manager.</p></div> : null}
+      <p className={styles.managerNote}><TriangleAlert size={14} />Hidden folders hide their entire subtree during normal navigation. Missing records are never deleted automatically; edit the path to a currently mounted directory to repair them.</p>
     </div></div>
   );
 }
@@ -51,15 +55,15 @@ function FolderMetadataRow({ folder, onUpdate, onDelete }: { folder: FolderMetad
   const [folderPath, setFolderPath] = useState(folder.path);
   const changed = alias !== (folder.alias ?? "") || folderPath !== folder.path;
   return (
-    <div className={`metadata-row ${folder.status === "missing" ? "is-missing" : ""}`} role="row">
-      <div><input className="inline-field alias" value={alias} placeholder="No alias" onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && changed) void onUpdate({ alias, path: folderPath }); if (event.key === "Escape") { setAlias(folder.alias ?? ""); setFolderPath(folder.path); } }} /></div>
-      <div><input className="inline-field path" value={folderPath} onChange={(event) => setFolderPath(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && changed) void onUpdate({ alias, path: folderPath }); if (event.key === "Escape") setFolderPath(folder.path); }} /></div>
-      <div className="metadata-flags">
-        <button type="button" className={folder.favorite ? "is-on favorite" : ""} onClick={() => void onUpdate({ favorite: !folder.favorite })} title="Favorite"><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
-        <button type="button" className={folder.hidden ? "is-on" : ""} onClick={() => void onUpdate({ hidden: !folder.hidden })} title="Hidden"><EyeOff size={14} /></button>
+    <div className={cx(styles.metadataRow, folder.status === "missing" && styles.missing)} role="row">
+      <div><input className={styles.inlineField} value={alias} placeholder="No alias" onChange={(event) => setAlias(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && changed) void onUpdate({ alias, path: folderPath }); if (event.key === "Escape") { setAlias(folder.alias ?? ""); setFolderPath(folder.path); } }} /></div>
+      <div><input className={cx(styles.inlineField, styles.path)} value={folderPath} onChange={(event) => setFolderPath(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && changed) void onUpdate({ alias, path: folderPath }); if (event.key === "Escape") setFolderPath(folder.path); }} /></div>
+      <div className={styles.metadataFlags}>
+        <button type="button" className={cx(folder.favorite && styles.on, folder.favorite && styles.favorite)} onClick={() => void onUpdate({ favorite: !folder.favorite })} title="Favorite"><Star size={14} fill={folder.favorite ? "currentColor" : "none"} /></button>
+        <button type="button" className={folder.hidden ? styles.on : undefined} onClick={() => void onUpdate({ hidden: !folder.hidden })} title="Hidden"><EyeOff size={14} /></button>
       </div>
-      <span className={`metadata-status ${folder.status}`} >{folder.status === "ok" ? <Check size={12} /> : <X size={12} />}{folder.status}</span>
-      <div className="metadata-actions">{changed ? <button className="compact-button primary" type="button" onClick={() => void onUpdate({ alias, path: folderPath })}>Save</button> : null}<button className="icon-button danger-hover" type="button" onClick={() => window.confirm("Remove this metadata record? The folder and files will not be changed.") && void onDelete()} aria-label="Remove metadata"><Trash2 size={14} /></button></div>
+      <span className={cx(styles.metadataStatus, folder.status === "ok" ? styles.ok : styles.missingStatus)}>{folder.status === "ok" ? <Check size={12} /> : <X size={12} />}{folder.status}</span>
+      <div className={styles.metadataActions}>{changed ? <button className={cx(ui.compactButton, ui.primary)} type="button" onClick={() => void onUpdate({ alias, path: folderPath })}>Save</button> : null}<button className={cx(ui.iconButton, ui.dangerHover)} type="button" onClick={() => window.confirm("Remove this metadata record? The folder and files will not be changed.") && void onDelete()} aria-label="Remove metadata"><Trash2 size={14} /></button></div>
     </div>
   );
 }
